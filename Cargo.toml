@@ -1,0 +1,16 @@
+[package]
+name = "watchdir"
+version = "0.1.0"
+authors = ["rydesun <rydesun@gmail.com>"]
+license = "MIT"
+description = "A tool to watch directories in which files were created"
+homepage = "https://github.com/rydesun/watchdir"
+repository = "https://github.com/rydesun/watchdir"
+keywords = ["cli", "inotify", "linux"]
+categories = ["command-line-utilities"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = "0.2"
