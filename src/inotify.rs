@@ -26,18 +26,16 @@ impl Drop for Watcher {
 }
 
 impl Watcher {
-    pub fn new(paths: &HashSet<String>) -> Self {
+    pub fn new(dirs: &HashSet<String>) -> Self {
         let fd = unsafe { libc::inotify_init() };
         let f = unsafe { File::from_raw_fd(fd) };
 
-        let mut wds: HashMap<i32, String> = HashMap::new();
-        for p in paths.iter() {
-            let path = CString::new(p.clone()).unwrap();
-            let wd =
-                unsafe { libc::inotify_add_watch(fd, path.as_ptr() as *const i8, libc::IN_CREATE) };
-            wds.insert(wd, p.to_string());
+        let wds: HashMap<i32, String> = HashMap::new();
+        let mut watcher = Watcher { f, fd, wds };
+        for p in dirs.iter() {
+            watcher.add_path(p);
         }
-        Watcher { f, fd, wds }
+        watcher
     }
     pub fn read_event(&mut self) -> Vec<Event> {
         let mut buffer = [0; MAX_INOTIFY_EVENT_SIZE];
@@ -54,6 +52,13 @@ impl Watcher {
             p += 16 + raw_event.len as usize;
         }
         events
+    }
+    fn add_path(&mut self, path: &String) {
+        let ffi_path = CString::new(path.clone()).unwrap();
+        let wd = unsafe {
+            libc::inotify_add_watch(self.fd, ffi_path.as_ptr() as *const i8, libc::IN_CREATE)
+        };
+        self.wds.insert(wd, path.clone());
     }
     fn get_raw_event(&self, raw: &[u8]) -> RawEvent {
         let mut raw_wd = [0; 4];
