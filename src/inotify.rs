@@ -55,15 +55,20 @@ impl Watcher {
 
             if Path::new(&full_path).is_dir() {
                 // Add new directory
-                self.recursive_add_path(&full_path.to_string_lossy().to_string());
-            };
-            events.push(Event { path: full_path });
+                let new_dirs = self.recursive_add_path(&full_path.to_string_lossy().to_string());
+                for i in new_dirs {
+                    events.push(Event { path: i })
+                }
+            } else {
+                events.push(Event { path: full_path });
+            }
 
             p += 16 + raw_event.len as usize;
         }
         events
     }
-    fn recursive_add_path(&mut self, d: &String) {
+    fn recursive_add_path(&mut self, d: &String) -> Vec<PathBuf> {
+        let mut new_dirs: Vec<PathBuf> = Vec::new();
         for entry in WalkDir::new(d) {
             match entry {
                 Err(_) => continue,
@@ -71,10 +76,12 @@ impl Watcher {
                     let path = entry.path();
                     if path.is_dir() {
                         self.add_path(&path.to_string_lossy().to_string());
+                        new_dirs.push(PathBuf::from(path));
                     }
                 }
             }
         }
+        new_dirs
     }
     fn add_path(&mut self, path: &String) {
         let ffi_path = CString::new(path.clone()).unwrap();
