@@ -57,6 +57,10 @@ impl Watcher {
         while p < total {
             let raw = &buffer[p..];
             let raw_event = self.get_raw_event(raw);
+            if raw_event.mask & libc::IN_CREATE == 0 {
+                p += 16 + raw_event.len as usize;
+                continue;
+            }
             let full_path = self.get_full_path(raw_event.wd, raw_event.path);
 
             if Path::new(&full_path).is_dir() {
@@ -79,15 +83,23 @@ impl Watcher {
     }
     fn get_raw_event(&self, raw: &[u8]) -> RawEvent {
         let mut raw_wd = [0; 4];
+        let mut raw_mask = [0; 4];
         let mut raw_len = [0; 4];
         raw_wd.copy_from_slice(&raw[..4]);
+        raw_mask.copy_from_slice(&raw[4..8]);
         raw_len.copy_from_slice(&raw[12..16]);
         let wd = unsafe { transmute::<[u8; 4], i32>(raw_wd) };
+        let mask = unsafe { transmute::<[u8; 4], u32>(raw_mask) };
         let len = unsafe { transmute::<[u8; 4], u32>(raw_len) };
         let raw_path =
             String::from_utf8(raw[16..(16 + len as usize)].to_vec()).expect("invalid text");
         let path = raw_path.trim_matches(char::from(0)).to_string();
-        RawEvent { wd, len, path }
+        RawEvent {
+            wd,
+            mask,
+            len,
+            path,
+        }
     }
     fn get_full_path(&self, wd: i32, path: String) -> PathBuf {
         let dir = self.wds[&wd].clone();
@@ -97,6 +109,7 @@ impl Watcher {
 
 struct RawEvent {
     wd: i32,
+    mask: u32,
     len: u32,
     path: String,
 }
