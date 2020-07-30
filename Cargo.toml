@@ -14,3 +14,4 @@ edition = "2018"
 
 [dependencies]
 libc = "0.2"
+walkdir = "2"

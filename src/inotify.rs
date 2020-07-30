@@ -7,6 +7,7 @@ use std::{
     os::unix::io::FromRawFd,
     path::{Path, PathBuf},
 };
+use walkdir::WalkDir;
 
 const MAX_FILE_NAME: usize = 255;
 const MAX_INOTIFY_EVENT_SIZE: usize = 16 + MAX_FILE_NAME + 1;
@@ -32,8 +33,18 @@ impl Watcher {
 
         let wds: HashMap<i32, String> = HashMap::new();
         let mut watcher = Watcher { f, fd, wds };
-        for p in dirs.iter() {
-            watcher.add_path(p);
+        for d in dirs.iter() {
+            for entry in WalkDir::new(d) {
+                match entry {
+                    Err(_) => continue,
+                    Ok(entry) => {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            watcher.add_path(&path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
         }
         watcher
     }
@@ -47,6 +58,11 @@ impl Watcher {
             let raw = &buffer[p..];
             let raw_event = self.get_raw_event(raw);
             let full_path = self.get_full_path(raw_event.wd, raw_event.path);
+
+            if Path::new(&full_path).is_dir() {
+                // Add new directory
+                self.add_path(&full_path.to_string_lossy().to_string());
+            };
             events.push(Event { path: full_path });
 
             p += 16 + raw_event.len as usize;
@@ -59,6 +75,7 @@ impl Watcher {
             libc::inotify_add_watch(self.fd, ffi_path.as_ptr() as *const i8, libc::IN_CREATE)
         };
         self.wds.insert(wd, path.clone());
+        eprintln!("Add new watch: {}", path);
     }
     fn get_raw_event(&self, raw: &[u8]) -> RawEvent {
         let mut raw_wd = [0; 4];
