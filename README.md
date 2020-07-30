@@ -1,6 +1,7 @@
 # watchdir
 
-A simple tool to find newly created files by watching several directories. Watch at directory in shallow depth, not recursively.
+A simple tool to find newly created files by watching several directories.
+Watch at directory in shallow depth, not recursively.
 
 ## Usage
 
@@ -24,12 +25,12 @@ touch ~/.hidden_file
 
 And I can find this line in the output
 
-```
+```text
 /home/rydesun/.hidden_file
 ```
 
 ## Installation
 
 ```bash
-cargo install --git https://github.com/rydesun/watchdir
+cargo install --locked --git https://github.com/rydesun/watchdir
 ```
