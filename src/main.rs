@@ -8,10 +8,17 @@ fn get_dirs(paths: impl Iterator<Item = String>) -> (Vec<String>, Vec<String>) {
     let mut dirs: Vec<String> = Vec::new();
     let mut others: Vec<String> = Vec::new();
     for p in paths {
-        if metadata(&p).unwrap().is_dir() {
-            dirs.push(p);
-        } else {
-            others.push(p);
+        match metadata(&p) {
+            Ok(path) => {
+                if path.is_dir() {
+                    dirs.push(p);
+                } else {
+                    others.push(p);
+                }
+            }
+            Err(_) => {
+                others.push(p);
+            }
         }
     }
     (dirs, others)
