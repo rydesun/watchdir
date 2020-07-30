@@ -34,17 +34,7 @@ impl Watcher {
         let wds: HashMap<i32, String> = HashMap::new();
         let mut watcher = Watcher { f, fd, wds };
         for d in dirs.iter() {
-            for entry in WalkDir::new(d) {
-                match entry {
-                    Err(_) => continue,
-                    Ok(entry) => {
-                        let path = entry.path();
-                        if path.is_dir() {
-                            watcher.add_path(&path.to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
+            watcher.recursive_add_path(d);
         }
         watcher
     }
@@ -65,13 +55,26 @@ impl Watcher {
 
             if Path::new(&full_path).is_dir() {
                 // Add new directory
-                self.add_path(&full_path.to_string_lossy().to_string());
+                self.recursive_add_path(&full_path.to_string_lossy().to_string());
             };
             events.push(Event { path: full_path });
 
             p += 16 + raw_event.len as usize;
         }
         events
+    }
+    fn recursive_add_path(&mut self, d: &String) {
+        for entry in WalkDir::new(d) {
+            match entry {
+                Err(_) => continue,
+                Ok(entry) => {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        self.add_path(&path.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
     }
     fn add_path(&mut self, path: &String) {
         let ffi_path = CString::new(path.clone()).unwrap();
