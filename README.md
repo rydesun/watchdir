@@ -1,9 +1,10 @@
 # watchdir
 
-A simple tool to find newly created files by watching several directories,
+A simple tool to find newly created files or directories by watching several directories,
 and do it recursively.
 
-A directory is ignored in the following situations:
+When diving into deeper directory recursively,
+a directory will be ignored in the following situations:
 
 - have no permission
 - is hidden by dot
