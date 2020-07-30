@@ -20,7 +20,7 @@ fn get_dirs(paths: impl Iterator<Item = String>) -> (Vec<String>, Vec<String>) {
 fn main() {
     let (dirs, invalid_paths) = get_dirs(env::args().skip(1));
     if dirs.len() == 0 {
-        eprint!("invalid arguments: found no dirs!\n");
+        eprintln!("invalid arguments: found no dirs!");
         exit(1);
     }
     if invalid_paths.len() > 0 {
