@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::CString,
     fs::File,
     io::Read,
@@ -26,7 +26,7 @@ impl Drop for Watcher {
 }
 
 impl Watcher {
-    pub fn new(paths: &Vec<String>) -> Self {
+    pub fn new(paths: &HashSet<String>) -> Self {
         let fd = unsafe { libc::inotify_init() };
         let f = unsafe { File::from_raw_fd(fd) };
 

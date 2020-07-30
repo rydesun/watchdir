@@ -2,22 +2,22 @@ extern crate libc;
 
 mod inotify;
 
-use std::{env, fs::metadata, iter::Iterator, process::exit};
+use std::{collections::HashSet, env, fs::metadata, iter::Iterator, process::exit};
 
-fn get_dirs(paths: impl Iterator<Item = String>) -> (Vec<String>, Vec<String>) {
-    let mut dirs: Vec<String> = Vec::new();
-    let mut others: Vec<String> = Vec::new();
+fn get_dirs(paths: impl Iterator<Item = String>) -> (HashSet<String>, HashSet<String>) {
+    let mut dirs: HashSet<String> = HashSet::new();
+    let mut others: HashSet<String> = HashSet::new();
     for p in paths {
         match metadata(&p) {
             Ok(path) => {
                 if path.is_dir() {
-                    dirs.push(p);
+                    dirs.insert(p);
                 } else {
-                    others.push(p);
+                    others.insert(p);
                 }
             }
             Err(_) => {
-                others.push(p);
+                others.insert(p);
             }
         }
     }
