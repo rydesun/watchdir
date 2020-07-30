@@ -1,7 +1,13 @@
 # watchdir
 
-A simple tool to find newly created files by watching several directories.
-Watch at directory in shallow depth, not recursively.
+A simple tool to find newly created files by watching several directories,
+and do it recursively.
+
+A directory is ignored in the following situations:
+
+- have no permission
+- is hidden by dot
+- is a symlink
 
 ## Usage
 
@@ -11,23 +17,26 @@ Watch at directory in shallow depth, not recursively.
 watchdir /etc ~/.config
 ```
 
-- Watch dotfiles created in home directory
+- Watch dotfiles created in home config directory
 
 ```bash
-watchdir ~ | grep ".*/\."
+watchdir ~/.config | grep ".*/\."
 ```
 
-Then someone create dotfile in my home directory `/home/rydesun`
+For example, someone create a dotfile in my home config directory `/home/rydesun/.config/`
 
 ```bash
-touch ~/.hidden_file
+touch ~/.config/.hidden_file
 ```
 
-And I can find this line in the output
+And find this line in the output
 
 ```text
-/home/rydesun/.hidden_file
+/home/rydesun/.config/.hidden_file
 ```
+
+**IMPORTANT**: DO NOT watch at a large directory, such as `/` or `~`,
+it do harm to performance.
 
 ## Installation
 
