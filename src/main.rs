@@ -33,7 +33,7 @@ fn main() {
     if invalid_paths.len() > 0 {
         eprintln!("ignore path: {:?}", invalid_paths);
     }
-    let mut watcher = inotify::build_watcher(&dirs);
+    let mut watcher = inotify::Watcher::new(&dirs);
     loop {
         let inotify_events = watcher.read_event();
         for e in inotify_events {

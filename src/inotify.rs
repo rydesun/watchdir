@@ -17,20 +17,6 @@ pub struct Watcher {
     wds: HashMap<i32, String>,
 }
 
-pub fn build_watcher(paths: &Vec<String>) -> Watcher {
-    let fd = unsafe { libc::inotify_init() };
-    let f = unsafe { File::from_raw_fd(fd) };
-
-    let mut wds: HashMap<i32, String> = HashMap::new();
-    for p in paths.iter() {
-        let path = CString::new(p.clone()).unwrap();
-        let wd =
-            unsafe { libc::inotify_add_watch(fd, path.as_ptr() as *const i8, libc::IN_CREATE) };
-        wds.insert(wd, p.to_string());
-    }
-    Watcher { f, fd, wds }
-}
-
 impl Drop for Watcher {
     fn drop(&mut self) {
         for wd in self.wds.keys() {
@@ -40,6 +26,19 @@ impl Drop for Watcher {
 }
 
 impl Watcher {
+    pub fn new(paths: &Vec<String>) -> Self {
+        let fd = unsafe { libc::inotify_init() };
+        let f = unsafe { File::from_raw_fd(fd) };
+
+        let mut wds: HashMap<i32, String> = HashMap::new();
+        for p in paths.iter() {
+            let path = CString::new(p.clone()).unwrap();
+            let wd =
+                unsafe { libc::inotify_add_watch(fd, path.as_ptr() as *const i8, libc::IN_CREATE) };
+            wds.insert(wd, p.to_string());
+        }
+        Watcher { f, fd, wds }
+    }
     pub fn read_event(&mut self) -> Vec<Event> {
         let mut buffer = [0; MAX_INOTIFY_EVENT_SIZE];
         let total = self.f.read(&mut buffer).expect("buffer overflow");
