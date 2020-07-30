@@ -35,7 +35,9 @@ fn main() {
     }
     let mut watcher = inotify::build_watcher(&dirs);
     loop {
-        let inotify_event = watcher.read_event();
-        println!("{}", inotify_event.path.display());
+        let inotify_events = watcher.read_event();
+        for e in inotify_events {
+            println!("{}", e.path.display());
+        }
     }
 }
