@@ -13,6 +13,7 @@ const MAX_INOTIFY_EVENT_SIZE: usize = 16 + MAX_FILE_NAME + 1;
 
 pub struct Watcher {
     f: File,
+    fd: i32,
     wds: HashMap<i32, String>,
 }
 
@@ -27,7 +28,15 @@ pub fn build_watcher(paths: &Vec<String>) -> Watcher {
             unsafe { libc::inotify_add_watch(fd, path.as_ptr() as *const i8, libc::IN_CREATE) };
         wds.insert(wd, p.to_string());
     }
-    Watcher { f, wds }
+    Watcher { f, fd, wds }
+}
+
+impl Drop for Watcher {
+    fn drop(&mut self) {
+        for wd in self.wds.keys() {
+            unsafe { libc::inotify_rm_watch(self.fd, *wd) };
+        }
+    }
 }
 
 impl Watcher {
