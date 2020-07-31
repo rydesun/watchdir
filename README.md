@@ -7,8 +7,11 @@ When diving into deeper directory recursively,
 a directory will be ignored in the following situations:
 
 - have no permission
-- is hidden by dot
 - is a symlink
+
+Also by default, it will not ignore created hidden dotfiles or directories,
+but will not dive into hidden subdirectories.
+Use `--hidden` to supress this behavior.
 
 ## Usage
 

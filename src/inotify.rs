@@ -3,11 +3,12 @@ use std::{
     ffi::CString,
     fs::File,
     io::Read,
+    iter::Iterator,
     mem::transmute,
     os::unix::io::FromRawFd,
     path::{Path, PathBuf},
 };
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 const MAX_FILE_NAME: usize = 255;
 const MAX_INOTIFY_EVENT_SIZE: usize = 16 + MAX_FILE_NAME + 1;
@@ -16,6 +17,7 @@ pub struct Watcher {
     f: File,
     fd: i32,
     wds: HashMap<i32, String>,
+    hidden: bool,
 }
 
 impl Drop for Watcher {
@@ -27,14 +29,14 @@ impl Drop for Watcher {
 }
 
 impl Watcher {
-    pub fn new(dirs: &HashSet<String>) -> Self {
+    pub fn new(dirs: &HashSet<String>, hidden: bool) -> Self {
         let fd = unsafe { libc::inotify_init() };
         let f = unsafe { File::from_raw_fd(fd) };
 
         let wds: HashMap<i32, String> = HashMap::new();
-        let mut watcher = Watcher { f, fd, wds };
+        let mut watcher = Watcher { f, fd, wds, hidden };
         for d in dirs.iter() {
-            watcher.recursive_add_path(d);
+            watcher.recursive_add_path(d, true);
         }
         watcher
     }
@@ -52,30 +54,44 @@ impl Watcher {
                 continue;
             }
             let full_path = self.get_full_path(raw_event.wd, raw_event.path);
+            events.push(Event {
+                path: full_path.clone(),
+            });
 
-            if Path::new(&full_path).is_dir() {
+            if full_path.is_dir() {
                 // Add new directory
-                let new_dirs = self.recursive_add_path(&full_path.to_string_lossy().to_string());
-                for i in new_dirs {
+                let new_deeper_dirs =
+                    self.recursive_add_path(&full_path.to_string_lossy().to_string(), false);
+                for i in new_deeper_dirs {
                     events.push(Event { path: i })
                 }
-            } else {
-                events.push(Event { path: full_path });
             }
-
             p += 16 + raw_event.len as usize;
         }
         events
     }
-    fn recursive_add_path(&mut self, d: &String) -> Vec<PathBuf> {
+    fn recursive_add_path(&mut self, d: &String, at_top: bool) -> Vec<PathBuf> {
         let mut new_dirs: Vec<PathBuf> = Vec::new();
-        for entry in WalkDir::new(d) {
+        let walker: Box<dyn Iterator<Item = Result<DirEntry, walkdir::Error>>>;
+        if self.hidden {
+            walker = Box::new(WalkDir::new(d).into_iter());
+        } else {
+            walker = Box::new(
+                WalkDir::new(d)
+                    .into_iter()
+                    .filter_entry(|e| (at_top && e.depth() == 0) || !is_hidden(e)),
+            )
+        }
+        for entry in walker {
             match entry {
                 Err(_) => continue,
                 Ok(entry) => {
                     let path = entry.path();
-                    if path.is_dir() {
-                        self.add_path(&path.to_string_lossy().to_string());
+                    if !path.is_dir() {
+                        continue;
+                    }
+                    self.add_path(&path.to_string_lossy().to_string());
+                    if entry.depth() > 0 {
                         new_dirs.push(PathBuf::from(path));
                     }
                 }
@@ -126,4 +142,12 @@ struct RawEvent {
 
 pub struct Event {
     pub path: PathBuf,
+}
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
 }
