@@ -34,7 +34,7 @@ impl Watcher {
         let f = unsafe { File::from_raw_fd(fd) };
 
         let wds: HashMap<i32, String> = HashMap::new();
-        let mut watcher = Watcher { f, fd, wds, hidden };
+        let mut watcher = Self { f, fd, wds, hidden };
         for d in dirs.iter() {
             watcher.recursive_add_path(d, true);
         }
@@ -43,7 +43,7 @@ impl Watcher {
     pub fn read_event(&mut self) -> Vec<Event> {
         let mut buffer = [0; MAX_INOTIFY_EVENT_SIZE];
         let total = self.f.read(&mut buffer).expect("buffer overflow");
-        let mut events: Vec<Event> = Vec::new();
+        let mut events = Vec::new();
 
         let mut p = 0;
         while p < total {
@@ -71,7 +71,7 @@ impl Watcher {
         events
     }
     fn recursive_add_path(&mut self, d: &String, at_top: bool) -> Vec<PathBuf> {
-        let mut new_dirs: Vec<PathBuf> = Vec::new();
+        let mut new_dirs = Vec::new();
         let walker: Box<dyn Iterator<Item = Result<DirEntry, walkdir::Error>>>;
         if self.hidden {
             walker = Box::new(WalkDir::new(d).into_iter());
