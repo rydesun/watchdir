@@ -108,22 +108,16 @@ impl Watcher {
         eprintln!("Add new watch: {}", path);
     }
     fn get_raw_event(&self, raw: &[u8]) -> RawEvent {
-        let mut raw_wd = [0; 4];
-        let mut raw_mask = [0; 4];
-        let mut raw_len = [0; 4];
-        raw_wd.copy_from_slice(&raw[..4]);
-        raw_mask.copy_from_slice(&raw[4..8]);
-        raw_len.copy_from_slice(&raw[12..16]);
-        let wd = unsafe { transmute::<[u8; 4], i32>(raw_wd) };
-        let mask = unsafe { transmute::<[u8; 4], u32>(raw_mask) };
-        let len = unsafe { transmute::<[u8; 4], u32>(raw_len) };
-        let raw_path =
-            String::from_utf8(raw[16..(16 + len as usize)].to_vec()).expect("invalid text");
+        let mut raw_array = [0; 16];
+        raw_array.copy_from_slice(&raw[..16]);
+        let raw_event = unsafe { transmute::<[u8; 16], libc::inotify_event>(raw_array) };
+        let raw_path = String::from_utf8(raw[16..(16 + raw_event.len as usize)].to_vec())
+            .expect("invalid text");
         let path = raw_path.trim_matches(char::from(0)).to_string();
         RawEvent {
-            wd,
-            mask,
-            len,
+            wd: raw_event.wd,
+            mask: raw_event.mask,
+            len: raw_event.len,
             path,
         }
     }
