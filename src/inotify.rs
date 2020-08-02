@@ -17,6 +17,7 @@ pub struct Watcher {
     f: File,
     fd: i32,
     wds: HashMap<i32, String>,
+    cookies: HashMap<u32, String>,
     hidden: bool,
 }
 
@@ -34,7 +35,14 @@ impl Watcher {
         let f = unsafe { File::from_raw_fd(fd) };
 
         let wds: HashMap<i32, String> = HashMap::new();
-        let mut watcher = Self { f, fd, wds, hidden };
+        let cookies: HashMap<u32, String> = HashMap::new();
+        let mut watcher = Self {
+            f,
+            fd,
+            wds,
+            cookies,
+            hidden,
+        };
         for d in dirs.iter() {
             watcher.recursive_add_path(d, true);
         }
@@ -49,6 +57,29 @@ impl Watcher {
         while p < total {
             let raw = &buffer[p..];
             let raw_event = self.get_raw_event(raw);
+            if raw_event.mask & libc::IN_MOVED_FROM > 0 {
+                let full_path = self.get_full_path(raw_event.wd, raw_event.path.clone());
+                self.cookies
+                    .insert(raw_event.cookie, full_path.to_string_lossy().to_string());
+            }
+            if raw_event.mask & libc::IN_MOVED_TO > 0 {
+                let old_path = self.cookies.get(&raw_event.cookie).unwrap().clone();
+                let new_path = self.get_full_path(raw_event.wd, raw_event.path.clone());
+                let mut is_watched = false;
+                for val in self.wds.values_mut() {
+                    if *val == old_path {
+                        *val = new_path.to_string_lossy().to_string();
+                        is_watched = true;
+                    }
+                }
+                if !is_watched && new_path.is_dir() {
+                    events.push(Event {
+                        path: new_path.clone(),
+                    });
+                    self.recursive_add_path(&new_path.to_string_lossy().to_string(), false);
+                }
+                self.cookies.remove(&raw_event.cookie);
+            }
             if raw_event.mask & libc::IN_CREATE == 0 {
                 p += 16 + raw_event.len as usize;
                 continue;
@@ -102,7 +133,8 @@ impl Watcher {
     fn add_path(&mut self, path: &String) {
         let ffi_path = CString::new(path.clone()).unwrap();
         let wd = unsafe {
-            libc::inotify_add_watch(self.fd, ffi_path.as_ptr() as *const i8, libc::IN_CREATE)
+            let event_types = libc::IN_CREATE | libc::IN_MOVE;
+            libc::inotify_add_watch(self.fd, ffi_path.as_ptr() as *const i8, event_types)
         };
         self.wds.insert(wd, path.clone());
         eprintln!("Add new watch: {}", path);
@@ -117,6 +149,7 @@ impl Watcher {
         RawEvent {
             wd: raw_event.wd,
             mask: raw_event.mask,
+            cookie: raw_event.cookie,
             len: raw_event.len,
             path,
         }
@@ -127,9 +160,11 @@ impl Watcher {
     }
 }
 
+#[derive(Debug)]
 struct RawEvent {
     wd: i32,
     mask: u32,
+    cookie: u32,
     len: u32,
     path: String,
 }
