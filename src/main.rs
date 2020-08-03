@@ -13,30 +13,10 @@ struct Opts {
     paths: Vec<String>,
 }
 
-fn get_dirs(paths: Vec<String>) -> (HashSet<String>, HashSet<String>) {
-    let mut dirs: HashSet<String> = HashSet::new();
-    let mut others: HashSet<String> = HashSet::new();
-    for p in paths {
-        match metadata(&p) {
-            Ok(path) => {
-                if path.is_dir() {
-                    dirs.insert(p);
-                } else {
-                    others.insert(p);
-                }
-            }
-            Err(_) => {
-                others.insert(p);
-            }
-        }
-    }
-    (dirs, others)
-}
-
 fn main() {
     let opts: Opts = Opts::parse();
 
-    let (dirs, invalid_paths) = get_dirs(opts.paths);
+    let (dirs, invalid_paths): (HashSet<_>, HashSet<_>) = opts.paths.into_iter().partition(is_dir);
     if dirs.len() == 0 {
         eprintln!("invalid arguments: found no dirs!");
         exit(1);
@@ -50,5 +30,13 @@ fn main() {
         for e in inotify_events {
             println!("{}", e.path.display());
         }
+    }
+}
+
+fn is_dir(path: &String) -> bool {
+    if let Ok(p) = metadata(path) {
+        p.is_dir()
+    } else {
+        false
     }
 }

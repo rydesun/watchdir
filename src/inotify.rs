@@ -104,28 +104,23 @@ impl Watcher {
     fn recursive_add_path(&mut self, d: &String, at_top: bool) -> Vec<PathBuf> {
         let mut new_dirs = Vec::new();
         let walker: Box<dyn Iterator<Item = Result<DirEntry, walkdir::Error>>>;
-        if self.hidden {
-            walker = Box::new(WalkDir::new(d).into_iter());
+        walker = if self.hidden {
+            Box::new(WalkDir::new(d).into_iter())
         } else {
-            walker = Box::new(
+            Box::new(
                 WalkDir::new(d)
                     .into_iter()
                     .filter_entry(|e| (at_top && e.depth() == 0) || !is_hidden(e)),
             )
-        }
-        for entry in walker {
-            match entry {
-                Err(_) => continue,
-                Ok(entry) => {
-                    let path = entry.path();
-                    if !path.is_dir() {
-                        continue;
-                    }
-                    self.add_path(&path.to_string_lossy().to_string());
-                    if entry.depth() > 0 {
-                        new_dirs.push(PathBuf::from(path));
-                    }
-                }
+        };
+        for entry in walker.filter_map(Result::ok) {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            self.add_path(&path.to_string_lossy().to_string());
+            if entry.depth() > 0 {
+                new_dirs.push(PathBuf::from(path));
             }
         }
         new_dirs
