@@ -48,6 +48,7 @@ impl Watcher {
         }
         watcher
     }
+
     pub fn read_event(&mut self) -> Vec<Event> {
         let mut buffer = [0; MAX_INOTIFY_EVENT_SIZE];
         let total = self.f.read(&mut buffer).expect("buffer overflow");
@@ -101,6 +102,7 @@ impl Watcher {
         }
         events
     }
+
     fn recursive_add_path(&mut self, d: &String, at_top: bool) -> Vec<PathBuf> {
         let mut new_dirs = Vec::new();
         let walker: Box<dyn Iterator<Item = Result<DirEntry, walkdir::Error>>>;
@@ -125,6 +127,7 @@ impl Watcher {
         }
         new_dirs
     }
+
     fn add_path(&mut self, path: &String) {
         let ffi_path = CString::new(path.clone()).unwrap();
         let wd = unsafe {
@@ -134,6 +137,7 @@ impl Watcher {
         self.wds.insert(wd, path.clone());
         eprintln!("Add new watch: {}", path);
     }
+
     fn get_raw_event(&self, raw: &[u8]) -> RawEvent {
         let mut raw_array = [0; 16];
         raw_array.copy_from_slice(&raw[..16]);
@@ -149,6 +153,7 @@ impl Watcher {
             path,
         }
     }
+
     fn get_full_path(&self, wd: i32, path: String) -> PathBuf {
         let dir = self.wds[&wd].clone();
         Path::new(&dir).join(path)
