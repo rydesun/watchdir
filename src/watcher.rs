@@ -10,7 +10,7 @@ use walkdir::WalkDir;
 use crate::inotify;
 use crate::inotify::{EventKind, EventSeq};
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Event {
     Create(PathBuf),
     Move(PathBuf, PathBuf),
@@ -169,5 +169,67 @@ fn guard(opts: WatcherOpts, path: &Path) -> bool {
         matches!(opts.sub_dotdir, Dotdir::Include)
     } else {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::distributions::Alphanumeric;
+    use rand::{thread_rng, Rng};
+    use std::fs::{create_dir, create_dir_all, File};
+
+    fn random_string(len: usize) -> String {
+        thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(len)
+            .map(char::from)
+            .collect()
+    }
+
+    #[test]
+    fn test_create_file() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let mut watcher = Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let path = top_dir.path().join(random_string(5));
+        File::create(&path).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Create(path))
+    }
+
+    #[test]
+    fn test_create_in_created_subdir() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let mut watcher = Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let dir = top_dir.path().join(random_string(5));
+        create_dir(&dir).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Create(dir.clone()));
+
+        let path = dir.join(random_string(5));
+        File::create(&path).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Create(path))
+    }
+
+    #[test]
+    fn test_create_in_recur_created_subdir() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let mut watcher = Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let recur_depth = 3;
+        let mut dir = top_dir.path().to_owned();
+        let mut dirs: Vec<PathBuf> = Vec::<PathBuf>::new();
+        for _ in 0..recur_depth {
+            dir = dir.join(random_string(5));
+            dirs.push(dir.clone());
+        }
+        create_dir_all(&dir).unwrap();
+        for i in 0..recur_depth {
+            assert_eq!(watcher.next().unwrap(), Event::Create(dirs[i].clone()));
+        }
+
+        let path = dir.join(random_string(5));
+        File::create(&path).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Create(path))
     }
 }
