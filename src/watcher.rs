@@ -133,7 +133,7 @@ impl Iterator for Watcher {
                     self.cached_events = Some(Box::new(
                         self.add_all_watch(&full_path)
                             .into_iter()
-                            .map(|d| Event::Create(d)),
+                            .map(Event::Create),
                     ));
                 }
                 Some(Event::Create(full_path))
@@ -224,8 +224,8 @@ mod tests {
             dirs.push(dir.clone());
         }
         create_dir_all(&dir).unwrap();
-        for i in 0..recur_depth {
-            assert_eq!(watcher.next().unwrap(), Event::Create(dirs[i].clone()));
+        for d in dirs.iter().take(recur_depth) {
+            assert_eq!(watcher.next().unwrap(), Event::Create(d.to_owned()));
         }
 
         let path = dir.join(random_string(5));

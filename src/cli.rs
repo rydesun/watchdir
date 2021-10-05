@@ -36,7 +36,7 @@ pub fn parse() -> Opts {
             }
         })
         .collect();
-    if dirs.len() == 0 {
+    if dirs.is_empty() {
         eprintln!("Must contain at least one valid path!");
         exit(1);
     }

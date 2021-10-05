@@ -44,7 +44,7 @@ impl EventSeq {
         let path = {
             let raw_path = unsafe {
                 CStr::from_bytes_with_nul_unchecked(
-                    &raw[INOTIFY_EVENT_HEADER_SIZE
+                    raw[INOTIFY_EVENT_HEADER_SIZE
                         ..(INOTIFY_EVENT_HEADER_SIZE + raw_event.len as usize)]
                         .split_inclusive(|c| *c == 0)
                         .next()
