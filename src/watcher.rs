@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 use crate::inotify;
 use crate::inotify::{EventKind, EventSeq};
@@ -28,13 +28,18 @@ pub enum Dotdir {
 }
 
 pub struct Watcher {
+    opts: WatcherOpts,
     fd: i32,
     wds: HashMap<i32, PathBuf>,
     cookie: Option<(u32, PathBuf)>,
-    sub_dotdir: Dotdir,
     event_seq: EventSeq,
     cached_event: Option<(inotify::RawEvent, inotify::Event)>,
     cached_events: Option<Box<dyn Iterator<Item = Event>>>,
+}
+
+#[derive(Copy, Clone)]
+struct WatcherOpts {
+    sub_dotdir: Dotdir,
 }
 
 impl Watcher {
@@ -51,9 +56,9 @@ impl Watcher {
 
         let mut watcher = Self {
             fd,
+            opts: WatcherOpts { sub_dotdir },
             wds: HashMap::new(),
             cookie: None,
-            sub_dotdir,
             event_seq,
             cached_event: None,
             cached_events: None,
@@ -73,25 +78,21 @@ impl Watcher {
     }
 
     fn add_all_watch(&mut self, d: &Path) -> Vec<PathBuf> {
+        self.add_watch(d);
+        let opts = self.opts;
         let mut new_dirs = Vec::new();
-        let sub_dotdir = self.sub_dotdir;
 
-        let walker = WalkDir::new(d)
+        WalkDir::new(d)
+            .min_depth(1)
             .into_iter()
-            .filter_entry(|e| {
-                e.depth() > 0 || !(matches!(sub_dotdir, Dotdir::Exclude) && is_hidden(e))
-            })
-            .filter_map(Result::ok);
+            .filter_entry(|e| guard(opts, e.path()))
+            .filter_map(Result::ok)
+            .for_each(|e| {
+                let dir = e.path();
+                self.add_watch(dir);
+                new_dirs.push(dir.to_owned());
+            });
 
-        for entry in walker {
-            let path = entry.path();
-            if path.is_dir() {
-                self.add_watch(path);
-                if entry.depth() > 0 {
-                    new_dirs.push(path.to_owned());
-                }
-            }
-        }
         new_dirs
     }
 
@@ -128,7 +129,7 @@ impl Iterator for Watcher {
         let full_path = self.get_full_path(raw_event.wd, &event.path);
         match event.kind {
             EventKind::Create => {
-                if full_path.is_dir() {
+                if guard(self.opts, &full_path) {
                     self.cached_events = Some(Box::new(
                         self.add_all_watch(&full_path)
                             .into_iter()
@@ -142,7 +143,7 @@ impl Iterator for Watcher {
                 self.next()
             }
             EventKind::MoveTo => {
-                if full_path.is_dir() {
+                if guard(self.opts, &full_path) {
                     self.add_all_watch(&full_path);
                 }
                 Some(Event::MoveInto(full_path))
@@ -160,10 +161,13 @@ impl Drop for Watcher {
     }
 }
 
-fn is_hidden(entry: &DirEntry) -> bool {
-    entry
-        .file_name()
-        .to_str()
-        .map(|s| s.starts_with('.'))
-        .unwrap_or(false)
+fn guard(opts: WatcherOpts, path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    if path.file_name().unwrap().as_bytes()[0] == b'.' {
+        matches!(opts.sub_dotdir, Dotdir::Include)
+    } else {
+        true
+    }
 }
