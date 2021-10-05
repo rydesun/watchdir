@@ -1,7 +1,10 @@
 use clap::{Clap, ValueHint};
 use std::{fs::metadata, iter::Iterator, path::PathBuf, process::exit};
 
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " ", env!("GIT_SHA"));
+
 #[derive(Clap)]
+#[clap(version = VERSION)]
 #[clap(setting = clap::AppSettings::ColoredHelp)]
 pub struct Opts {
     /// Include hidden files and directories
