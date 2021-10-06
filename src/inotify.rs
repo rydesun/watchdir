@@ -46,7 +46,7 @@ impl EventSeq {
         } else {
             EventKind::Unknown
         };
-        let path = {
+        let path = if raw_event.len > 0 {
             let raw_path = unsafe {
                 CStr::from_bytes_with_nul_unchecked(
                     raw[INOTIFY_EVENT_HEADER_SIZE
@@ -57,7 +57,9 @@ impl EventSeq {
                         .unwrap(),
                 )
             };
-            PathBuf::from(OsStr::from_bytes(raw_path.to_bytes()))
+            Some(PathBuf::from(OsStr::from_bytes(raw_path.to_bytes())))
+        } else {
+            None
         };
 
         let (raw_event, event) = (
@@ -101,7 +103,7 @@ pub struct RawEvent {
 
 #[derive(Debug)]
 pub struct Event {
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
     pub kind: EventKind,
 }
 

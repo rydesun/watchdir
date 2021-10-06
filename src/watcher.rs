@@ -121,7 +121,8 @@ impl Iterator for Watcher {
             if matches!(event.kind, EventKind::MoveTo)
                 && raw_event.cookie == cookie_pair.0
             {
-                let full_path = self.get_full_path(raw_event.wd, &event.path);
+                let full_path =
+                    self.get_full_path(raw_event.wd, &event.path.unwrap());
                 // FIXME: update watched name
                 return Some(Event::Move(cookie_pair.1.to_owned(), full_path));
             }
@@ -131,9 +132,10 @@ impl Iterator for Watcher {
             return Some(Event::MoveAway(cookie_pair.1.to_owned()));
         }
 
-        let full_path = self.get_full_path(raw_event.wd, &event.path);
         match event.kind {
             EventKind::Create => {
+                let full_path =
+                    self.get_full_path(raw_event.wd, &event.path.unwrap());
                 if guard(self.opts, &full_path) {
                     self.cached_events = Some(Box::new(
                         self.add_all_watch(&full_path)
@@ -144,10 +146,14 @@ impl Iterator for Watcher {
                 Some(Event::Create(full_path))
             }
             EventKind::MoveFrom => {
+                let full_path =
+                    self.get_full_path(raw_event.wd, &event.path.unwrap());
                 self.cookie = Some((raw_event.cookie, full_path));
                 self.next()
             }
             EventKind::MoveTo => {
+                let full_path =
+                    self.get_full_path(raw_event.wd, &event.path.unwrap());
                 if guard(self.opts, &full_path) {
                     self.add_all_watch(&full_path);
                 }
