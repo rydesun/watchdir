@@ -15,6 +15,10 @@ pub struct Opts {
     /// Directories watched
     #[clap(name = "DIR", parse(from_os_str), value_hint = ValueHint::AnyPath)]
     pub dirs: Vec<PathBuf>,
+
+    /// A level of verbosity, and can be used up to 2 times
+    #[clap(short, long, parse(from_occurrences))]
+    pub verbose: i32,
 }
 
 pub fn parse() -> Opts {

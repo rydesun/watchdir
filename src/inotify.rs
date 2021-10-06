@@ -7,6 +7,8 @@ use std::{
     path::PathBuf,
 };
 
+use tracing::{info, instrument};
+
 const MAX_FILENAME_LENGTH: usize = 255;
 const INOTIFY_EVENT_HEADER_SIZE: usize = size_of::<libc::inotify_event>();
 const MAX_INOTIFY_EVENT_SIZE: usize =
@@ -29,6 +31,7 @@ impl EventSeq {
         }
     }
 
+    #[instrument(skip(self), fields(len=self.len, offset=self.offset))]
     fn parse(&self) -> (RawEvent, Event) {
         let raw = &self.buffer[self.offset..];
         let raw_event: libc::inotify_event =
@@ -57,14 +60,17 @@ impl EventSeq {
             PathBuf::from(OsStr::from_bytes(raw_path.to_bytes()))
         };
 
-        (
+        let (raw_event, event) = (
             RawEvent {
                 wd: raw_event.wd,
                 cookie: raw_event.cookie,
                 len: raw_event.len,
             },
             Event { kind, path },
-        )
+        );
+        info!(?raw_event, ?event);
+
+        (raw_event, event)
     }
 }
 
