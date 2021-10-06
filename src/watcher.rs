@@ -27,12 +27,14 @@ pub enum Dotdir {
     Exclude,
 }
 
+type Cookie = u32;
+
 pub struct Watcher {
     opts: WatcherOpts,
     fd: i32,
     wds: HashMap<i32, PathBuf>,
-    cookie: Option<(u32, PathBuf)>,
     event_seq: EventSeq,
+    prev: Option<(EventKind, Cookie, PathBuf)>,
     cached_event: Option<(inotify::RawEvent, inotify::Event)>,
     cached_events: Option<Box<dyn Iterator<Item = Event>>>,
 }
@@ -58,8 +60,8 @@ impl Watcher {
             fd,
             opts: WatcherOpts { sub_dotdir },
             wds: HashMap::new(),
-            cookie: None,
             event_seq,
+            prev: None,
             cached_event: None,
             cached_events: None,
         };
@@ -72,7 +74,7 @@ impl Watcher {
 
     fn add_watch(&mut self, path: &Path) {
         let ffi_path = CString::new(path.as_os_str().as_bytes()).unwrap();
-        let event_types = libc::IN_CREATE | libc::IN_MOVE;
+        let event_types = libc::IN_CREATE | libc::IN_MOVE | libc::IN_MOVE_SELF;
         let wd = unsafe {
             libc::inotify_add_watch(self.fd, ffi_path.as_ptr(), event_types)
         };
@@ -117,19 +119,31 @@ impl Iterator for Watcher {
             .take()
             .unwrap_or_else(|| self.event_seq.next().unwrap());
 
-        if let Some(cookie_pair) = &self.cookie.take() {
-            if matches!(event.kind, EventKind::MoveTo)
-                && raw_event.cookie == cookie_pair.0
-            {
+        if let Some((kind, cookie, path)) = self.prev.take() {
+            if matches!(event.kind, EventKind::MoveTo) {
+                if raw_event.cookie != cookie {
+                    // FIXME: unknown situation
+                    panic!("TODO: not implement");
+                }
                 let full_path =
                     self.get_full_path(raw_event.wd, &event.path.unwrap());
-                // FIXME: update watched name
-                return Some(Event::Move(cookie_pair.1.to_owned(), full_path));
+                self.prev =
+                    Some((event.kind, raw_event.cookie, full_path.to_owned()));
+                return Some(Event::Move(path.to_owned(), full_path));
+            } else if matches!(event.kind, EventKind::MoveSelf) {
+                if matches!(kind, EventKind::MoveFrom) {
+                    // FIXME: undo watching
+                    return Some(Event::MoveAway(path));
+                } else {
+                    // FIXME: update watched subdirs
+                    *self.wds.get_mut(&raw_event.wd).unwrap() =
+                        path.to_owned();
+                    return self.next();
+                }
+            } else {
+                self.cached_event = Some((raw_event, event));
+                return Some(Event::MoveAway(path));
             }
-
-            self.cached_event = Some((raw_event, event));
-            // FIXME: undo watching
-            return Some(Event::MoveAway(cookie_pair.1.to_owned()));
         }
 
         match event.kind {
@@ -148,7 +162,9 @@ impl Iterator for Watcher {
             EventKind::MoveFrom => {
                 let full_path =
                     self.get_full_path(raw_event.wd, &event.path.unwrap());
-                self.cookie = Some((raw_event.cookie, full_path));
+                self.prev =
+                    Some((EventKind::MoveFrom, raw_event.cookie, full_path));
+                // FIXME: too laggy for file moving
                 self.next()
             }
             EventKind::MoveTo => {
@@ -185,7 +201,7 @@ fn guard(opts: WatcherOpts, path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{create_dir, create_dir_all, File};
+    use std::fs::{create_dir, create_dir_all, rename, File};
 
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
@@ -247,5 +263,103 @@ mod tests {
         let path = dir.join(random_string(5));
         File::create(&path).unwrap();
         assert_eq!(watcher.next().unwrap(), Event::Create(path))
+    }
+
+    #[test]
+    fn test_move_dir() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let old_dir = top_dir.path().join(random_string(5));
+        create_dir(&old_dir).unwrap();
+
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let new_dir = top_dir.path().join(random_string(5));
+        rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::Move(old_dir, new_dir))
+    }
+
+    #[test]
+    fn test_move_file() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let old_file = top_dir.path().join(random_string(5));
+        File::create(&old_file).unwrap();
+
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let new_file = top_dir.path().join(random_string(5));
+        rename(old_file.to_owned(), new_file.to_owned()).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::Move(old_file, new_file))
+    }
+
+    #[test]
+    fn test_dir_move_away() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let unwatched_dir = tempfile::tempdir().unwrap();
+        let old_dir = top_dir.path().join(random_string(5));
+        create_dir(&old_dir).unwrap();
+
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let new_dir = unwatched_dir.path().join(random_string(5));
+        rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_dir))
+    }
+
+    #[test]
+    fn test_file_move_away() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let unwatched_dir = tempfile::tempdir().unwrap();
+        let old_file = top_dir.path().join(random_string(5));
+        File::create(&old_file).unwrap();
+
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let new_file = unwatched_dir.path().join(random_string(5));
+        rename(old_file.to_owned(), new_file.to_owned()).unwrap();
+
+        // FIXME: It is waiting for next event
+        let next_file = top_dir.path().join(random_string(5));
+        File::create(&next_file).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
+        assert_eq!(watcher.next().unwrap(), Event::Create(next_file))
+    }
+
+    #[test]
+    fn test_dir_move_into() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let unwatched_dir = tempfile::tempdir().unwrap();
+        let old_dir = unwatched_dir.path().join(random_string(5));
+        create_dir(&old_dir).unwrap();
+
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let new_dir = top_dir.path().join(random_string(5));
+        rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::MoveInto(new_dir))
+    }
+
+    #[test]
+    fn test_file_move_info() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let unwatched_dir = tempfile::tempdir().unwrap();
+        let old_file = unwatched_dir.path().join(random_string(5));
+        File::create(&old_file).unwrap();
+
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let new_file = top_dir.path().join(random_string(5));
+        rename(old_file.to_owned(), new_file.to_owned()).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::MoveInto(new_file));
     }
 }

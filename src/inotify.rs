@@ -43,6 +43,8 @@ impl EventSeq {
             EventKind::MoveTo
         } else if raw_event.mask & libc::IN_CREATE > 0 {
             EventKind::Create
+        } else if raw_event.mask & libc::IN_MOVE_SELF > 0 {
+            EventKind::MoveSelf
         } else {
             EventKind::Unknown
         };
@@ -111,6 +113,7 @@ pub struct Event {
 pub enum EventKind {
     MoveTo,
     MoveFrom,
+    MoveSelf,
     Create,
     Unknown,
 }
