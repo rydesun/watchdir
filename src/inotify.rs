@@ -9,7 +9,8 @@ use std::{
 
 const MAX_FILENAME_LENGTH: usize = 255;
 const INOTIFY_EVENT_HEADER_SIZE: usize = size_of::<libc::inotify_event>();
-const MAX_INOTIFY_EVENT_SIZE: usize = INOTIFY_EVENT_HEADER_SIZE + MAX_FILENAME_LENGTH + 1;
+const MAX_INOTIFY_EVENT_SIZE: usize =
+    INOTIFY_EVENT_HEADER_SIZE + MAX_FILENAME_LENGTH + 1;
 
 pub struct EventSeq {
     file: File,
@@ -30,7 +31,8 @@ impl EventSeq {
 
     fn parse(&self) -> (RawEvent, Event) {
         let raw = &self.buffer[self.offset..];
-        let raw_event: libc::inotify_event = unsafe { std::ptr::read(raw.as_ptr() as *const _) };
+        let raw_event: libc::inotify_event =
+            unsafe { std::ptr::read(raw.as_ptr() as *const _) };
 
         let kind = if raw_event.mask & libc::IN_MOVED_FROM > 0 {
             EventKind::MoveFrom
@@ -45,7 +47,8 @@ impl EventSeq {
             let raw_path = unsafe {
                 CStr::from_bytes_with_nul_unchecked(
                     raw[INOTIFY_EVENT_HEADER_SIZE
-                        ..(INOTIFY_EVENT_HEADER_SIZE + raw_event.len as usize)]
+                        ..(INOTIFY_EVENT_HEADER_SIZE
+                            + raw_event.len as usize)]
                         .split_inclusive(|c| *c == 0)
                         .next()
                         .unwrap(),
@@ -67,6 +70,7 @@ impl EventSeq {
 
 impl Iterator for EventSeq {
     type Item = (RawEvent, Event);
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset >= self.len {
             self.buffer.fill(0);

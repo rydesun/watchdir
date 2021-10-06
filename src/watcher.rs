@@ -73,7 +73,9 @@ impl Watcher {
     fn add_watch(&mut self, path: &Path) {
         let ffi_path = CString::new(path.as_os_str().as_bytes()).unwrap();
         let event_types = libc::IN_CREATE | libc::IN_MOVE;
-        let wd = unsafe { libc::inotify_add_watch(self.fd, ffi_path.as_ptr(), event_types) };
+        let wd = unsafe {
+            libc::inotify_add_watch(self.fd, ffi_path.as_ptr(), event_types)
+        };
         self.wds.insert(wd, path.to_owned());
     }
 
@@ -103,6 +105,7 @@ impl Watcher {
 
 impl Iterator for Watcher {
     type Item = Event;
+
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(cached_events) = &mut self.cached_events {
             if let Some(event) = cached_events.next() {
@@ -115,7 +118,9 @@ impl Iterator for Watcher {
             .unwrap_or_else(|| self.event_seq.next().unwrap());
 
         if let Some(cookie_pair) = &self.cookie.take() {
-            if matches!(event.kind, EventKind::MoveTo) && raw_event.cookie == cookie_pair.0 {
+            if matches!(event.kind, EventKind::MoveTo)
+                && raw_event.cookie == cookie_pair.0
+            {
                 let full_path = self.get_full_path(raw_event.wd, &event.path);
                 // FIXME: update watched name
                 return Some(Event::Move(cookie_pair.1.to_owned(), full_path));
@@ -174,10 +179,12 @@ fn guard(opts: WatcherOpts, path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::fs::{create_dir, create_dir_all, File};
+
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
-    use std::fs::{create_dir, create_dir_all, File};
+
+    use super::*;
 
     fn random_string(len: usize) -> String {
         thread_rng()
@@ -190,7 +197,8 @@ mod tests {
     #[test]
     fn test_create_file() {
         let top_dir = tempfile::tempdir().unwrap();
-        let mut watcher = Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
 
         let path = top_dir.path().join(random_string(5));
         File::create(&path).unwrap();
@@ -200,7 +208,8 @@ mod tests {
     #[test]
     fn test_create_in_created_subdir() {
         let top_dir = tempfile::tempdir().unwrap();
-        let mut watcher = Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
 
         let dir = top_dir.path().join(random_string(5));
         create_dir(&dir).unwrap();
@@ -214,7 +223,8 @@ mod tests {
     #[test]
     fn test_create_in_recur_created_subdir() {
         let top_dir = tempfile::tempdir().unwrap();
-        let mut watcher = Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
 
         let recur_depth = 3;
         let mut dir = top_dir.path().to_owned();

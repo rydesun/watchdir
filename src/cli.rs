@@ -1,5 +1,6 @@
-use clap::{Clap, ValueHint};
 use std::{fs::metadata, iter::Iterator, path::PathBuf, process::exit};
+
+use clap::{Clap, ValueHint};
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " ", env!("GIT_SHA"));
 
