@@ -19,8 +19,9 @@ fn main() {
         },
     ) {
         Ok(watcher) => watcher,
-        Err(_) => {
-            return;
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
         }
     };
     for event in watcher {

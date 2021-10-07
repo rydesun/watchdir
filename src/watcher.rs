@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use snafu::Snafu;
 use walkdir::WalkDir;
 
 use crate::inotify;
@@ -27,6 +28,20 @@ pub enum Dotdir {
     Exclude,
 }
 
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Failed to use inotify API"))]
+    InotifyInit,
+
+    #[snafu(display("Failed to watch dir: {}", path.display()))]
+    InotifyAdd { path: PathBuf },
+
+    #[snafu(display("Duplicated adding: {}", path.display()))]
+    InotifyAddDup { wd: i32, path: PathBuf },
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
+
 type Cookie = u32;
 
 pub struct Watcher {
@@ -45,14 +60,14 @@ struct WatcherOpts {
 }
 
 impl Watcher {
-    pub fn new<I>(dirs: I, sub_dotdir: Dotdir) -> Result<Self, String>
+    pub fn new<I>(dirs: I, sub_dotdir: Dotdir) -> Result<Self>
     where
         I: IntoIterator,
         I::Item: AsRef<Path>,
     {
         let fd = unsafe { libc::inotify_init() };
         if fd < 0 {
-            return Err("Failed to use inotify API".to_owned());
+            return Err(Error::InotifyInit);
         }
         let event_seq = EventSeq::new(fd);
 
@@ -72,17 +87,25 @@ impl Watcher {
         Ok(watcher)
     }
 
-    fn add_watch(&mut self, path: &Path) {
+    fn add_watch(&mut self, path: &Path) -> Result<()> {
         let ffi_path = CString::new(path.as_os_str().as_bytes()).unwrap();
         let event_types = libc::IN_CREATE | libc::IN_MOVE | libc::IN_MOVE_SELF;
         let wd = unsafe {
             libc::inotify_add_watch(self.fd, ffi_path.as_ptr(), event_types)
         };
-        self.wds.insert(wd, path.to_owned());
+        if wd < 0 {
+            return Err(Error::InotifyAdd { path: path.to_owned() });
+        }
+        if self.wds.insert(wd, path.to_owned()) == None {
+            Ok(())
+        } else {
+            Err(Error::InotifyAddDup { wd, path: path.to_owned() })
+        }
     }
 
+    // TODO: Error handling
     fn add_all_watch(&mut self, d: &Path) -> Vec<PathBuf> {
-        self.add_watch(d);
+        self.add_watch(d).unwrap();
         let opts = self.opts;
         let mut new_dirs = Vec::new();
 
@@ -93,7 +116,7 @@ impl Watcher {
             .filter_map(Result::ok)
             .for_each(|e| {
                 let dir = e.path();
-                self.add_watch(dir);
+                self.add_watch(dir).unwrap();
                 new_dirs.push(dir.to_owned());
             });
 
