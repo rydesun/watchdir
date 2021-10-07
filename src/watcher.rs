@@ -122,8 +122,9 @@ impl Iterator for Watcher {
         if let Some((kind, cookie, path)) = self.prev.take() {
             if matches!(event.kind, EventKind::MoveTo) {
                 if raw_event.cookie != cookie {
-                    // FIXME: unknown situation
-                    panic!("TODO: not implement");
+                    self.cached_event = Some((raw_event, event));
+                    // FIXME: undo watching
+                    return Some(Event::MoveAway(path));
                 }
                 let full_path =
                     self.get_full_path(raw_event.wd, &event.path.unwrap());
@@ -142,6 +143,7 @@ impl Iterator for Watcher {
                 }
             } else {
                 self.cached_event = Some((raw_event, event));
+                // FIXME: undo watching
                 return Some(Event::MoveAway(path));
             }
         }
@@ -189,6 +191,7 @@ impl Drop for Watcher {
 }
 
 fn guard(opts: WatcherOpts, path: &Path) -> bool {
+    // FIXME: metadata is unreliable
     if !path.is_dir() {
         return false;
     }
@@ -361,5 +364,30 @@ mod tests {
         rename(old_file.to_owned(), new_file.to_owned()).unwrap();
 
         assert_eq!(watcher.next().unwrap(), Event::MoveInto(new_file));
+    }
+
+    #[test]
+    fn test_file_move_away_and_move_into() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let unwatched_dir = tempfile::tempdir().unwrap();
+
+        let old_file = top_dir.path().join(random_string(5));
+        File::create(&old_file).unwrap();
+
+        let next_file_name = random_string(5);
+        let next_old_file =
+            unwatched_dir.path().join(next_file_name.to_owned());
+        File::create(&next_old_file).unwrap();
+
+        let mut watcher =
+            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+
+        let new_file = unwatched_dir.path().join(random_string(5));
+        rename(old_file.to_owned(), new_file.to_owned()).unwrap();
+        let next_new_file = top_dir.path().join(next_file_name);
+        rename(next_old_file.to_owned(), next_new_file.to_owned()).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
+        assert_eq!(watcher.next().unwrap(), Event::MoveInto(next_new_file))
     }
 }
