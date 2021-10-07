@@ -35,7 +35,7 @@ pub struct Watcher {
     wds: HashMap<i32, PathBuf>,
     event_seq: EventSeq,
     prev: Option<(EventKind, Cookie, PathBuf)>,
-    cached_event: Option<(inotify::RawEvent, inotify::Event)>,
+    cached_inotify_event: Option<inotify::Event>,
     cached_events: Option<Box<dyn Iterator<Item = Event>>>,
 }
 
@@ -62,7 +62,7 @@ impl Watcher {
             wds: HashMap::new(),
             event_seq,
             prev: None,
-            cached_event: None,
+            cached_inotify_event: None,
             cached_events: None,
         };
         for d in dirs {
@@ -114,44 +114,51 @@ impl Iterator for Watcher {
                 return Some(event);
             }
         }
-        let (raw_event, event) = self
-            .cached_event
+        let inotify_event = self
+            .cached_inotify_event
             .take()
             .unwrap_or_else(|| self.event_seq.next().unwrap());
 
         if let Some((kind, cookie, path)) = self.prev.take() {
-            if matches!(event.kind, EventKind::MoveTo) {
-                if raw_event.cookie != cookie {
-                    self.cached_event = Some((raw_event, event));
+            if matches!(inotify_event.kind, EventKind::MoveTo) {
+                if inotify_event.cookie != cookie {
+                    self.cached_inotify_event = Some(inotify_event);
                     // FIXME: undo watching
                     return Some(Event::MoveAway(path));
                 }
-                let full_path =
-                    self.get_full_path(raw_event.wd, &event.path.unwrap());
-                self.prev =
-                    Some((event.kind, raw_event.cookie, full_path.to_owned()));
+                let full_path = self.get_full_path(
+                    inotify_event.wd,
+                    &inotify_event.path.unwrap(),
+                );
+                self.prev = Some((
+                    inotify_event.kind,
+                    inotify_event.cookie,
+                    full_path.to_owned(),
+                ));
                 return Some(Event::Move(path.to_owned(), full_path));
-            } else if matches!(event.kind, EventKind::MoveSelf) {
+            } else if matches!(inotify_event.kind, EventKind::MoveSelf) {
                 if matches!(kind, EventKind::MoveFrom) {
                     // FIXME: undo watching
                     return Some(Event::MoveAway(path));
                 } else {
                     // FIXME: update watched subdirs
-                    *self.wds.get_mut(&raw_event.wd).unwrap() =
+                    *self.wds.get_mut(&inotify_event.wd).unwrap() =
                         path.to_owned();
                     return self.next();
                 }
             } else {
-                self.cached_event = Some((raw_event, event));
+                self.cached_inotify_event = Some(inotify_event);
                 // FIXME: undo watching
                 return Some(Event::MoveAway(path));
             }
         }
 
-        match event.kind {
+        match inotify_event.kind {
             EventKind::Create => {
-                let full_path =
-                    self.get_full_path(raw_event.wd, &event.path.unwrap());
+                let full_path = self.get_full_path(
+                    inotify_event.wd,
+                    &inotify_event.path.unwrap(),
+                );
                 if guard(self.opts, &full_path) {
                     self.cached_events = Some(Box::new(
                         self.add_all_watch(&full_path)
@@ -162,16 +169,23 @@ impl Iterator for Watcher {
                 Some(Event::Create(full_path))
             }
             EventKind::MoveFrom => {
-                let full_path =
-                    self.get_full_path(raw_event.wd, &event.path.unwrap());
-                self.prev =
-                    Some((EventKind::MoveFrom, raw_event.cookie, full_path));
+                let full_path = self.get_full_path(
+                    inotify_event.wd,
+                    &inotify_event.path.unwrap(),
+                );
+                self.prev = Some((
+                    EventKind::MoveFrom,
+                    inotify_event.cookie,
+                    full_path,
+                ));
                 // FIXME: too laggy for file moving
                 self.next()
             }
             EventKind::MoveTo => {
-                let full_path =
-                    self.get_full_path(raw_event.wd, &event.path.unwrap());
+                let full_path = self.get_full_path(
+                    inotify_event.wd,
+                    &inotify_event.path.unwrap(),
+                );
                 if guard(self.opts, &full_path) {
                     self.add_all_watch(&full_path);
                 }

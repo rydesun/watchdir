@@ -32,7 +32,7 @@ impl EventSeq {
     }
 
     #[instrument(skip(self), fields(len=self.len, offset=self.offset))]
-    fn parse(&self) -> (RawEvent, Event) {
+    fn parse(&self) -> Event {
         let raw = &self.buffer[self.offset..];
         let raw_event: libc::inotify_event =
             unsafe { std::ptr::read(raw.as_ptr() as *const _) };
@@ -64,22 +64,21 @@ impl EventSeq {
             None
         };
 
-        let (raw_event, event) = (
-            RawEvent {
-                wd: raw_event.wd,
-                cookie: raw_event.cookie,
-                len: raw_event.len,
-            },
-            Event { kind, path },
-        );
-        info!(?raw_event, ?event);
+        let event = Event {
+            wd: raw_event.wd,
+            cookie: raw_event.cookie,
+            len: raw_event.len,
+            kind,
+            path,
+        };
+        info!(?event);
 
-        (raw_event, event)
+        event
     }
 }
 
 impl Iterator for EventSeq {
-    type Item = (RawEvent, Event);
+    type Item = Event;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset >= self.len {
@@ -90,21 +89,17 @@ impl Iterator for EventSeq {
             self.len = self.file.read(&mut self.buffer).unwrap();
         }
 
-        let (raw_event, event) = self.parse();
-        self.offset += INOTIFY_EVENT_HEADER_SIZE + raw_event.len as usize;
-        Some((raw_event, event))
+        let event = self.parse();
+        self.offset += INOTIFY_EVENT_HEADER_SIZE + event.len as usize;
+        Some(event)
     }
 }
 
 #[derive(Debug)]
-pub struct RawEvent {
+pub struct Event {
     pub wd: i32,
     pub cookie: u32,
     len: u32,
-}
-
-#[derive(Debug)]
-pub struct Event {
     pub path: Option<PathBuf>,
     pub kind: EventKind,
 }
