@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     ffi::CString,
+    fs::{self, Metadata},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
 };
@@ -114,7 +115,13 @@ impl Watcher {
         WalkDir::new(d)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|e| guard(opts, e.path()))
+            .filter_entry(|e| {
+                if let Ok(metadata) = e.metadata() {
+                    guard(opts, e.path(), metadata)
+                } else {
+                    false
+                }
+            })
             .filter_map(Result::ok)
             .for_each(|e| {
                 let dir = e.path();
@@ -182,12 +189,14 @@ impl Iterator for Watcher {
                     inotify_event.wd,
                     &inotify_event.path.unwrap(),
                 );
-                if guard(self.opts, &full_path) {
-                    self.cached_events = Some(Box::new(
-                        self.add_all_watch(&full_path)
-                            .into_iter()
-                            .map(Event::Create),
-                    ));
+                if let Ok(metadata) = fs::symlink_metadata(&full_path) {
+                    if guard(self.opts, &full_path, metadata) {
+                        self.cached_events = Some(Box::new(
+                            self.add_all_watch(&full_path)
+                                .into_iter()
+                                .map(Event::Create),
+                        ));
+                    }
                 }
                 Some(Event::Create(full_path))
             }
@@ -209,8 +218,10 @@ impl Iterator for Watcher {
                     inotify_event.wd,
                     &inotify_event.path.unwrap(),
                 );
-                if guard(self.opts, &full_path) {
-                    self.add_all_watch(&full_path);
+                if let Ok(metadata) = fs::symlink_metadata(&full_path) {
+                    if guard(self.opts, &full_path, metadata) {
+                        self.add_all_watch(&full_path);
+                    }
                 }
                 Some(Event::MoveInto(full_path))
             }
@@ -227,9 +238,9 @@ impl Drop for Watcher {
     }
 }
 
-fn guard(opts: WatcherOpts, path: &Path) -> bool {
+fn guard(opts: WatcherOpts, path: &Path, metadata: Metadata) -> bool {
     // FIXME: metadata is unreliable
-    if !path.is_dir() {
+    if !metadata.is_dir() {
         return false;
     }
     if path.file_name().unwrap().as_bytes()[0] == b'.' {
