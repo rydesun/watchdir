@@ -1,6 +1,7 @@
 use std::{fs::metadata, iter::Iterator, path::PathBuf, process::exit};
 
 use clap::{Clap, ValueHint};
+use tracing::{error, warn};
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " ", env!("GIT_SHA"));
 
@@ -32,17 +33,17 @@ pub fn parse() -> Opts {
                 if pm.is_dir() {
                     true
                 } else {
-                    eprintln!("Skip non-directory path: {}", p.display());
+                    warn!("Skip non-directory path: {}", p.display());
                     false
                 }
             } else {
-                eprintln!("Skip invalid path: {}", p.display());
+                warn!("Skip invalid path: {}", p.display());
                 false
             }
         })
         .collect();
     if dirs.is_empty() {
-        eprintln!("Must contain at least one valid path!");
+        error!("Must contain at least one valid path!");
         exit(1);
     }
 

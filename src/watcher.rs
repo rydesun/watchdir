@@ -6,6 +6,7 @@ use std::{
 };
 
 use snafu::Snafu;
+use tracing::info;
 use walkdir::WalkDir;
 
 use crate::inotify;
@@ -33,10 +34,10 @@ pub enum Error {
     #[snafu(display("Failed to use inotify API"))]
     InotifyInit,
 
-    #[snafu(display("Failed to watch dir: {}", path.display()))]
+    #[snafu(display("Failed to watch: {}", path.display()))]
     InotifyAdd { path: PathBuf },
 
-    #[snafu(display("Duplicated adding: {}", path.display()))]
+    #[snafu(display("Duplicated watch: {}", path.display()))]
     InotifyAddDup { wd: i32, path: PathBuf },
 }
 
@@ -103,9 +104,10 @@ impl Watcher {
         }
     }
 
-    // TODO: Error handling
     fn add_all_watch(&mut self, d: &Path) -> Vec<PathBuf> {
-        self.add_watch(d).unwrap();
+        if let Err(e) = self.add_watch(d) {
+            info!("{}", e);
+        }
         let opts = self.opts;
         let mut new_dirs = Vec::new();
 
@@ -116,8 +118,11 @@ impl Watcher {
             .filter_map(Result::ok)
             .for_each(|e| {
                 let dir = e.path();
-                self.add_watch(dir).unwrap();
-                new_dirs.push(dir.to_owned());
+                if let Err(e) = self.add_watch(dir) {
+                    info!("{}", e);
+                } else {
+                    new_dirs.push(dir.to_owned());
+                }
             });
 
         new_dirs

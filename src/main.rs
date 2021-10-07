@@ -2,7 +2,7 @@ mod cli;
 mod inotify;
 mod watcher;
 
-use tracing::Level;
+use tracing::{error, Level};
 use tracing_subscriber::EnvFilter;
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
     ) {
         Ok(watcher) => watcher,
         Err(e) => {
-            eprintln!("{}", e);
+            error!("{}", e);
             std::process::exit(1);
         }
     };
@@ -32,10 +32,13 @@ fn main() {
 fn init_logger(verbose_level: i32) {
     let subscriber = tracing_subscriber::fmt();
     match verbose_level {
-        0 => subscriber
-            .with_env_filter(EnvFilter::new(Level::WARN.to_string()))
+        0 => subscriber.init(),
+        1 => subscriber
+            .with_env_filter(EnvFilter::new(Level::DEBUG.to_string()))
             .init(),
-        1 => subscriber.init(),
-        _ => subscriber.pretty().init(),
+        _ => subscriber
+            .pretty()
+            .with_env_filter(EnvFilter::new(Level::DEBUG.to_string()))
+            .init(),
     };
 }

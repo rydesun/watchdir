@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 const MAX_FILENAME_LENGTH: usize = 255;
 const INOTIFY_EVENT_HEADER_SIZE: usize = size_of::<libc::inotify_event>();
@@ -71,7 +71,7 @@ impl EventSeq {
             kind,
             path,
         };
-        info!(?event);
+        debug!(?event);
 
         event
     }
