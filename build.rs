@@ -1,10 +1,15 @@
 use std::path::PathBuf;
 use std::{env, fs};
 
+use chrono::prelude::*;
+
 fn main() {
     if let Some(git_sha) = get_git_sha() {
         println!("cargo:rustc-env=GIT_SHA={}", git_sha);
     }
+
+    let utc = Utc::now();
+    println!("cargo:rustc-env=BUILD_DATE={}", utc);
 }
 
 fn get_git_sha() -> Option<String> {

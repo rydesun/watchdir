@@ -2,7 +2,7 @@ mod cli;
 mod inotify;
 mod watcher;
 
-use tracing::{error, Level};
+use tracing::{error, info, Level};
 use tracing_subscriber::EnvFilter;
 
 fn main() {
@@ -15,6 +15,8 @@ fn main() {
     };
 
     init_logger(opts.verbose);
+
+    info!("{}", cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
         &opts.dir,

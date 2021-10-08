@@ -3,7 +3,13 @@ use std::{fs, path::PathBuf};
 use clap::{Clap, ValueHint};
 use snafu::{ResultExt, Snafu};
 
-const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " ", env!("GIT_SHA"));
+pub const VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    " ",
+    env!("BUILD_DATE"),
+    " ",
+    env!("GIT_SHA")
+);
 
 #[derive(Clap)]
 #[clap(version = VERSION)]
