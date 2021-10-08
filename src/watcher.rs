@@ -159,6 +159,11 @@ impl Iterator for Watcher {
                     inotify_event.wd,
                     &inotify_event.path.unwrap(),
                 );
+                self.prev = Some((
+                    EventKind::MoveTo,
+                    inotify_event.cookie,
+                    full_path.to_owned(),
+                ));
                 return Some(Event::Move(path.to_owned(), full_path));
             } else if matches!(inotify_event.kind, EventKind::MoveSelf) {
                 if matches!(kind, EventKind::MoveFrom) {
