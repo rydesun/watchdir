@@ -6,12 +6,18 @@ use tracing::{error, Level};
 use tracing_subscriber::EnvFilter;
 
 fn main() {
-    let opts = cli::parse();
+    let opts = match cli::parse() {
+        Ok(opts) => opts,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
 
     init_logger(opts.verbose);
 
     let watcher = match watcher::Watcher::new(
-        &opts.dirs,
+        &opts.dir,
         if opts.hidden {
             watcher::Dotdir::Include
         } else {

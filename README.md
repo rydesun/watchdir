@@ -15,10 +15,8 @@ Use `--hidden` to supress this behavior.
 
 ## Usage
 
-- Watch several directories
-
 ```bash
-watchdir /etc ~/.config
+watchdir /etc
 ```
 
 - Watch dotfiles created in home config directory

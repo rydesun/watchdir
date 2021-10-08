@@ -1,7 +1,7 @@
-use std::{fs::metadata, iter::Iterator, path::PathBuf, process::exit};
+use std::{fs, path::PathBuf};
 
 use clap::{Clap, ValueHint};
-use tracing::{error, warn};
+use snafu::{ResultExt, Snafu};
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " ", env!("GIT_SHA"));
 
@@ -13,40 +13,39 @@ pub struct Opts {
     #[clap(short = 'H', long)]
     pub hidden: bool,
 
-    /// Directories watched
-    #[clap(name = "DIR", parse(from_os_str), value_hint = ValueHint::AnyPath)]
-    pub dirs: Vec<PathBuf>,
+    /// Directory to watch
+    #[clap(name = "DIR", parse(from_os_str), value_hint = ValueHint::DirPath)]
+    pub dir: PathBuf,
 
     /// A level of verbosity, and can be used up to 2 times
     #[clap(short, long, parse(from_occurrences))]
     pub verbose: i32,
 }
 
-pub fn parse() -> Opts {
-    let mut opts = Opts::parse();
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("{}", source))]
+    InvalidPath { source: std::io::Error },
 
-    let dirs: Vec<PathBuf> = opts
-        .dirs
-        .into_iter()
-        .filter(|p| {
-            if let Ok(pm) = metadata(p) {
-                if pm.is_dir() {
-                    true
-                } else {
-                    warn!("Skip non-directory path: {}", p.display());
-                    false
-                }
-            } else {
-                warn!("Skip invalid path: {}", p.display());
-                false
-            }
-        })
-        .collect();
-    if dirs.is_empty() {
-        error!("Must contain at least one valid path!");
-        exit(1);
+    #[snafu(display("Not a valid directory path"))]
+    NotDir,
+
+    #[snafu(display("Permission denied"))]
+    PermRead,
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
+
+pub fn parse() -> Result<Opts> {
+    let opts = Opts::parse();
+
+    let metadata = fs::metadata(&opts.dir).context(InvalidPath {})?;
+    if !metadata.is_dir() {
+        return Err(Error::NotDir);
     }
-
-    opts.dirs = dirs;
-    opts
+    if !fs::File::open(&opts.dir).is_ok() {
+        return Err(Error::PermRead);
+    } else {
+        Ok(opts)
+    }
 }

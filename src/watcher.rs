@@ -62,11 +62,7 @@ struct WatcherOpts {
 }
 
 impl Watcher {
-    pub fn new<I>(dirs: I, sub_dotdir: Dotdir) -> Result<Self>
-    where
-        I: IntoIterator,
-        I::Item: AsRef<Path>,
-    {
+    pub fn new(dir: &Path, sub_dotdir: Dotdir) -> Result<Self> {
         let fd = unsafe { libc::inotify_init() };
         if fd < 0 {
             return Err(Error::InotifyInit);
@@ -82,9 +78,7 @@ impl Watcher {
             cached_inotify_event: None,
             cached_events: None,
         };
-        for d in dirs {
-            watcher.add_all_watch(d.as_ref());
-        }
+        watcher.add_all_watch(dir);
 
         Ok(watcher)
     }
@@ -271,7 +265,7 @@ mod tests {
     fn test_create_file() {
         let top_dir = tempfile::tempdir().unwrap();
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let path = top_dir.path().join(random_string(5));
         File::create(&path).unwrap();
@@ -282,11 +276,11 @@ mod tests {
     fn test_create_in_created_subdir() {
         let top_dir = tempfile::tempdir().unwrap();
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let dir = top_dir.path().join(random_string(5));
         create_dir(&dir).unwrap();
-        assert_eq!(watcher.next().unwrap(), Event::Create(dir.clone()));
+        assert_eq!(watcher.next().unwrap(), Event::Create(dir.to_owned()));
 
         let path = dir.join(random_string(5));
         File::create(&path).unwrap();
@@ -297,14 +291,14 @@ mod tests {
     fn test_create_in_recur_created_subdir() {
         let top_dir = tempfile::tempdir().unwrap();
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let recur_depth = 3;
         let mut dir = top_dir.path().to_owned();
         let mut dirs: Vec<PathBuf> = Vec::<PathBuf>::new();
         for _ in 0..recur_depth {
             dir = dir.join(random_string(5));
-            dirs.push(dir.clone());
+            dirs.push(dir.to_owned());
         }
         create_dir_all(&dir).unwrap();
         for d in dirs.iter().take(recur_depth) {
@@ -323,7 +317,7 @@ mod tests {
         create_dir(&old_dir).unwrap();
 
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_dir = top_dir.path().join(random_string(5));
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
@@ -338,7 +332,7 @@ mod tests {
         File::create(&old_file).unwrap();
 
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_file = top_dir.path().join(random_string(5));
         rename(old_file.to_owned(), new_file.to_owned()).unwrap();
@@ -354,7 +348,7 @@ mod tests {
         create_dir(&old_dir).unwrap();
 
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_dir = unwatched_dir.path().join(random_string(5));
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
@@ -370,7 +364,7 @@ mod tests {
         File::create(&old_file).unwrap();
 
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_file = unwatched_dir.path().join(random_string(5));
         rename(old_file.to_owned(), new_file.to_owned()).unwrap();
@@ -390,7 +384,7 @@ mod tests {
         create_dir(&old_dir).unwrap();
 
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_dir = top_dir.path().join(random_string(5));
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
@@ -406,7 +400,7 @@ mod tests {
         File::create(&old_file).unwrap();
 
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_file = top_dir.path().join(random_string(5));
         rename(old_file.to_owned(), new_file.to_owned()).unwrap();
@@ -428,7 +422,7 @@ mod tests {
         File::create(&next_old_file).unwrap();
 
         let mut watcher =
-            Watcher::new(vec![&top_dir], Dotdir::Exclude).unwrap();
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_file = unwatched_dir.path().join(random_string(5));
         rename(old_file.to_owned(), new_file.to_owned()).unwrap();
