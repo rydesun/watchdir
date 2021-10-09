@@ -45,6 +45,8 @@ impl EventSeq {
             EventKind::Create
         } else if raw_event.mask & libc::IN_MOVE_SELF > 0 {
             EventKind::MoveSelf
+        } else if raw_event.mask & libc::IN_IGNORED > 0 {
+            EventKind::Ignored
         } else {
             EventKind::Unknown
         };
@@ -110,5 +112,6 @@ pub enum EventKind {
     MoveFrom,
     MoveSelf,
     Create,
+    Ignored,
     Unknown,
 }

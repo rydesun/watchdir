@@ -33,6 +33,9 @@ fn main() {
         }
     };
     for event in watcher {
+        if event == watcher::Event::Ignored {
+            continue;
+        }
         println!("{:?}", event);
     }
 }

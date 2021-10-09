@@ -21,6 +21,7 @@ pub enum Event {
     MoveInto(PathBuf),
     // TODO
     // Delete(PathBuf),
+    Ignored,
     Unknown,
 }
 
@@ -157,6 +158,25 @@ impl Watcher {
             *self.wds.get_mut(&wd).unwrap() = new_dir;
         }
     }
+
+    fn unwatch_all(&mut self, wd: i32) {
+        let path = self.wds.get(&wd).unwrap();
+        let mut old_dirs = Vec::<(PathBuf, i32)>::new();
+        for (p, wd) in self.path_tree.range(path.to_owned()..) {
+            if has_ancestor(p, &path) {
+                old_dirs.push((p.to_owned(), *wd));
+            } else {
+                break;
+            }
+        }
+        for (p, wd) in old_dirs {
+            unsafe {
+                libc::inotify_rm_watch(self.fd, wd);
+            }
+            self.path_tree.remove(&p);
+            self.wds.remove(&wd);
+        }
+    }
 }
 
 impl Iterator for Watcher {
@@ -177,7 +197,6 @@ impl Iterator for Watcher {
             if matches!(inotify_event.kind, EventKind::MoveTo) {
                 if inotify_event.cookie != cookie {
                     self.cached_inotify_event = Some(inotify_event);
-                    // FIXME: undo watching
                     return Some(Event::MoveAway(path));
                 }
                 let full_path = self.get_full_path(
@@ -192,7 +211,7 @@ impl Iterator for Watcher {
                 return Some(Event::Move(path.to_owned(), full_path));
             } else if matches!(inotify_event.kind, EventKind::MoveSelf) {
                 if matches!(kind, EventKind::MoveFrom) {
-                    // FIXME: undo watching
+                    self.unwatch_all(inotify_event.wd);
                     return Some(Event::MoveAway(path));
                 } else {
                     self.update_path(inotify_event.wd, &path);
@@ -200,7 +219,6 @@ impl Iterator for Watcher {
                 }
             } else {
                 self.cached_inotify_event = Some(inotify_event);
-                // FIXME: undo watching
                 return Some(Event::MoveAway(path));
             }
         }
@@ -247,6 +265,7 @@ impl Iterator for Watcher {
                 }
                 Some(Event::MoveInto(full_path))
             }
+            EventKind::Ignored => Some(Event::Ignored),
             _ => Some(Event::Unknown),
         }
     }
@@ -471,7 +490,11 @@ mod tests {
         let new_dir = unwatched_dir.path().join(random_string(5));
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
 
-        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_dir))
+        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_dir));
+
+        let unwatched_file = new_dir.join(random_string(5));
+        File::create(&unwatched_file).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Ignored);
     }
 
     #[test]
@@ -507,7 +530,14 @@ mod tests {
         let new_dir = top_dir.path().join(random_string(5));
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
 
-        assert_eq!(watcher.next().unwrap(), Event::MoveInto(new_dir))
+        assert_eq!(
+            watcher.next().unwrap(),
+            Event::MoveInto(new_dir.to_owned())
+        );
+
+        let new_file = new_dir.join(random_string(5));
+        File::create(&new_file).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Create(new_file));
     }
 
     #[test]
