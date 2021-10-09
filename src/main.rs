@@ -16,7 +16,7 @@ fn main() {
 
     init_logger(opts.verbose);
 
-    info!("{}", cli::VERSION);
+    info!("version: {}", cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
         &opts.dir,
@@ -32,6 +32,8 @@ fn main() {
             std::process::exit(1);
         }
     };
+    info!("initialized successfully and listening to upcoming events...\n");
+
     for event in watcher {
         if event == watcher::Event::Ignored {
             continue;

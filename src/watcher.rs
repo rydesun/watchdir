@@ -7,7 +7,7 @@ use std::{
 };
 
 use snafu::Snafu;
-use tracing::info;
+use tracing::warn;
 use walkdir::WalkDir;
 
 use crate::inotify;
@@ -110,7 +110,7 @@ impl Watcher {
 
     fn add_all_watch(&mut self, d: &Path) -> Vec<PathBuf> {
         if let Err(e) = self.add_watch(d) {
-            info!("{}", e);
+            warn!("{}", e);
         }
         let opts = self.opts;
         let mut new_dirs = Vec::new();
@@ -129,7 +129,7 @@ impl Watcher {
             .for_each(|e| {
                 let dir = e.path();
                 if let Err(e) = self.add_watch(dir) {
-                    info!("{}", e);
+                    warn!("{}", e);
                 } else {
                     new_dirs.push(dir.to_owned());
                 }
