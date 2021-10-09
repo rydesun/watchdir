@@ -2,6 +2,9 @@ mod cli;
 mod inotify;
 mod watcher;
 
+use std::io::Write;
+
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, Level};
 use tracing_subscriber::EnvFilter;
 
@@ -15,6 +18,13 @@ fn main() {
     };
 
     init_logger(opts.verbose);
+
+    let mut stdout = StandardStream::stdout(if isatty() {
+        ColorChoice::Auto
+    } else {
+        ColorChoice::Never
+    });
+    let mut color_spec = ColorSpec::new();
 
     info!("version: {}", cli::VERSION);
 
@@ -38,8 +48,47 @@ fn main() {
         if event == watcher::Event::Ignored {
             continue;
         }
-        println!("{:?}", event);
+        print_event(&mut stdout, &mut color_spec, event).unwrap()
     }
+}
+
+fn print_event(
+    stdout: &mut StandardStream,
+    color_spec: &mut ColorSpec,
+    event: watcher::Event,
+) -> Result<(), std::io::Error> {
+    match event {
+        watcher::Event::Create(path) => {
+            stdout.set_color(color_spec.set_fg(Some(Color::Green)))?;
+            write!(stdout, "{:<12}", "Create")?;
+            writeln!(stdout, "{:?}", path)?;
+        }
+        watcher::Event::Delete(path) => {
+            stdout.set_color(color_spec.set_fg(Some(Color::Red)))?;
+            write!(stdout, "{:<12}", "Delete")?;
+            writeln!(stdout, "{:?}", path)?;
+        }
+        watcher::Event::Move(from, to) => {
+            stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
+            write!(stdout, "{:<12}", "Move")?;
+            writeln!(stdout, "{:?} -> {:?}", from, to)?;
+        }
+        watcher::Event::MoveAway(path) => {
+            stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
+            write!(stdout, "{:<12}", "MoveAway")?;
+            writeln!(stdout, "{:?}", path)?;
+        }
+        watcher::Event::MoveInto(path) => {
+            stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
+            write!(stdout, "{:<12}", "MoveInto")?;
+            writeln!(stdout, "{:?}", path)?;
+        }
+        _ => {
+            stdout.set_color(color_spec.set_fg(Some(Color::Red)))?;
+            writeln!(stdout, "Unknown")?;
+        }
+    }
+    Ok(())
 }
 
 fn init_logger(verbose_level: i32) {
@@ -54,4 +103,8 @@ fn init_logger(verbose_level: i32) {
             .with_env_filter(EnvFilter::new(Level::DEBUG.to_string()))
             .init(),
     };
+}
+
+fn isatty() -> bool {
+    unsafe { libc::isatty(libc::STDOUT_FILENO) != 0 }
 }

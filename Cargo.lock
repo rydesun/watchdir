@@ -606,6 +606,7 @@ dependencies = [
  "rand",
  "snafu",
  "tempfile",
+ "termcolor",
  "tracing",
  "tracing-subscriber",
  "walkdir",
