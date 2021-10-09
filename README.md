@@ -1,40 +1,21 @@
 # watchdir
 
-A simple tool to find newly created files or directories by watching several directories,
-and do it recursively.
+A simple tool to find newly operations in specified directory,
+and do it recursively. It requires inotify to work properly.
 
 When diving into deeper directory recursively,
 a directory will be ignored in the following situations:
 
-- have no permission
-- is a symlink
+- no permission
+- symlink
 
-Also by default, it will not ignore created hidden dotfiles or directories,
-but will not dive into hidden subdirectories.
-Use `--hidden` to supress this behavior.
+Also by default, it will ignore what happend in hidden directories.
+Use `--hidden` option to supress this behavior.
 
 ## Usage
 
 ```bash
-watchdir /etc
-```
-
-- Watch dotfiles created in home config directory
-
-```bash
-watchdir ~/.config | grep ".*/\."
-```
-
-For example, someone create a dotfile in my home config directory `/home/rydesun/.config/`
-
-```bash
-touch ~/.config/.hidden_file
-```
-
-And find this line in the output
-
-```text
-/home/rydesun/.config/.hidden_file
+watchdir DIR
 ```
 
 **IMPORTANT**: DO NOT watch at a large directory, such as `/` or `~`,
