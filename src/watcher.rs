@@ -555,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn test_file_move_info() {
+    fn test_file_move_into() {
         let top_dir = tempfile::tempdir().unwrap();
         let unwatched_dir = tempfile::tempdir().unwrap();
         let old_file = unwatched_dir.path().join(random_string(5));
