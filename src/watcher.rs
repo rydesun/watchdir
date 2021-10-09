@@ -221,8 +221,10 @@ impl Iterator for Watcher {
                     return self.next();
                 }
             } else {
-                self.cached_inotify_event = Some(inotify_event);
-                return Some(Event::MoveAway(path));
+                if matches!(kind, EventKind::MoveFrom) {
+                    self.cached_inotify_event = Some(inotify_event);
+                    return Some(Event::MoveAway(path));
+                }
             }
         }
 
