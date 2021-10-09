@@ -92,7 +92,7 @@ fn print_event(
 }
 
 fn init_logger(verbose_level: i32) {
-    let subscriber = tracing_subscriber::fmt();
+    let subscriber = tracing_subscriber::fmt().with_writer(std::io::stderr);
     match verbose_level {
         0 => subscriber.init(),
         1 => subscriber
