@@ -19,8 +19,7 @@ pub enum Event {
     Move(PathBuf, PathBuf),
     MoveAway(PathBuf),
     MoveInto(PathBuf),
-    // TODO
-    // Delete(PathBuf),
+    Delete(PathBuf),
     Ignored,
     Unknown,
 }
@@ -88,7 +87,11 @@ impl Watcher {
 
     fn add_watch(&mut self, path: &Path) -> Result<()> {
         let ffi_path = CString::new(path.as_os_str().as_bytes()).unwrap();
-        let event_types = libc::IN_CREATE | libc::IN_MOVE | libc::IN_MOVE_SELF;
+        let event_types = libc::IN_CREATE
+            | libc::IN_MOVE
+            | libc::IN_MOVE_SELF
+            | libc::IN_DELETE
+            | libc::IN_DELETE_SELF;
         let wd = unsafe {
             libc::inotify_add_watch(self.fd, ffi_path.as_ptr(), event_types)
         };
@@ -264,6 +267,17 @@ impl Iterator for Watcher {
                     }
                 }
                 Some(Event::MoveInto(full_path))
+            }
+            EventKind::Delete => {
+                let full_path = self.get_full_path(
+                    inotify_event.wd,
+                    &inotify_event.path.unwrap(),
+                );
+                Some(Event::Delete(full_path))
+            }
+            EventKind::DeleteSelf => {
+                self.unwatch_all(inotify_event.wd);
+                self.next()
             }
             EventKind::Ignored => Some(Event::Ignored),
             _ => Some(Event::Unknown),
@@ -579,5 +593,62 @@ mod tests {
 
         assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
         assert_eq!(watcher.next().unwrap(), Event::MoveInto(next_new_file))
+    }
+
+    #[test]
+    fn test_remove_file() {
+        let top_dir = tempfile::tempdir().unwrap();
+
+        let path = top_dir.path().join(random_string(5));
+        File::create(&path).unwrap();
+
+        let mut watcher =
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
+
+        fs::remove_file(&path).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Delete(path))
+    }
+
+    #[test]
+    fn test_remove_dir() {
+        let top_dir = tempfile::tempdir().unwrap();
+
+        let dir = top_dir.path().join(random_string(5));
+        fs::create_dir(&dir).unwrap();
+
+        let mut watcher =
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
+
+        fs::remove_dir(&dir).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Delete(dir))
+    }
+
+    #[test]
+    fn test_remove_dir_recursively() {
+        let top_dir = tempfile::tempdir().unwrap();
+
+        let dir = top_dir.path().to_owned().join(random_string(5));
+        let mut sub_dir = dir.to_owned();
+        for _ in 0..3 {
+            sub_dir.push(random_string(5));
+        }
+        create_dir_all(&sub_dir).unwrap();
+        let file = sub_dir.join(random_string(5));
+        File::create(&file).unwrap();
+
+        let mut watcher =
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
+
+        fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::Delete(file));
+
+        for _ in 0..3 {
+            assert_eq!(
+                watcher.next().unwrap(),
+                Event::Delete(sub_dir.to_owned())
+            );
+            assert_eq!(watcher.next().unwrap(), Event::Ignored,);
+            sub_dir.pop();
+        }
     }
 }
