@@ -307,14 +307,18 @@ fn guard(opts: WatcherOpts, path: &Path, metadata: Metadata) -> bool {
     }
 }
 
-// PERF: bad performance
 fn has_ancestor(p1: &Path, p2: &Path) -> bool {
-    for p in p1.ancestors() {
-        if p == p2 {
-            return true;
+    let mut p1_iter = p1.components();
+    for i in p2.components() {
+        if let Some(j) = p1_iter.next() {
+            if i != j {
+                return false;
+            }
+        } else {
+            return false;
         }
     }
-    false
+    true
 }
 
 // PERF: bad performance
