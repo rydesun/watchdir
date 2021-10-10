@@ -5,7 +5,7 @@ mod watcher;
 use std::io::Write;
 
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use tracing::{error, info, Level};
+use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
 
 fn main() {
@@ -90,6 +90,9 @@ fn print_event(
             stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
             write!(stdout, "{:<12}", "MoveInto")?;
             writeln!(stdout, "{:?}", path)?;
+        }
+        watcher::Event::MoveTop => {
+            warn!("Watched dir was moved. The prefix of path can no longer be trusted!");
         }
         _ => {
             stdout.set_color(color_spec.set_fg(Some(Color::Red)))?;

@@ -19,6 +19,7 @@ pub enum Event {
     Move(PathBuf, PathBuf),
     MoveAway(PathBuf),
     MoveInto(PathBuf),
+    MoveTop,
     Delete(PathBuf),
     Ignored,
     Unknown,
@@ -281,6 +282,7 @@ impl Iterator for Watcher {
                 self.unwatch_all(inotify_event.wd);
                 self.next()
             }
+            EventKind::MoveSelf => Some(Event::MoveTop),
             EventKind::Ignored => Some(Event::Ignored),
             _ => Some(Event::Unknown),
         }
