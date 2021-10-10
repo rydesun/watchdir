@@ -21,6 +21,7 @@ pub enum Event {
     MoveInto(PathBuf),
     MoveTop,
     Delete(PathBuf),
+    DeleteTop,
     Ignored,
     Unknown,
 }
@@ -50,6 +51,7 @@ type Cookie = u32;
 pub struct Watcher {
     opts: WatcherOpts,
     fd: i32,
+    top_wd: i32,
     wds: HashMap<i32, PathBuf>,
     path_tree: BTreeMap<PathBuf, i32>,
     event_seq: EventSeq,
@@ -74,6 +76,7 @@ impl Watcher {
         let mut watcher = Self {
             fd,
             opts: WatcherOpts { sub_dotdir },
+            top_wd: 0,
             wds: HashMap::new(),
             path_tree: BTreeMap::new(),
             event_seq,
@@ -81,12 +84,14 @@ impl Watcher {
             cached_inotify_event: None,
             cached_events: None,
         };
-        watcher.add_all_watch(dir);
+        if let (Some(top_wd), _) = watcher.add_all_watch(dir) {
+            watcher.top_wd = top_wd;
+        }
 
         Ok(watcher)
     }
 
-    fn add_watch(&mut self, path: &Path) -> Result<()> {
+    fn add_watch(&mut self, path: &Path) -> Result<i32> {
         let ffi_path = CString::new(path.as_os_str().as_bytes()).unwrap();
         let event_types = libc::IN_CREATE
             | libc::IN_MOVE
@@ -106,13 +111,17 @@ impl Watcher {
         if self.wds.insert(wd, path.to_owned()) != None {
             return Err(Error::InotifyAddDup { wd, path: path.to_owned() });
         };
-        Ok(())
+        Ok(wd)
     }
 
-    fn add_all_watch(&mut self, d: &Path) -> Vec<PathBuf> {
-        if let Err(e) = self.add_watch(d) {
-            warn!("{}", e);
-        }
+    fn add_all_watch(&mut self, d: &Path) -> (Option<i32>, Vec<PathBuf>) {
+        let top_wd = match self.add_watch(d) {
+            Err(e) => {
+                warn!("{}", e);
+                None
+            }
+            Ok(wd) => Some(wd),
+        };
         let opts = self.opts;
         let mut new_dirs = Vec::new();
 
@@ -136,7 +145,7 @@ impl Watcher {
                 }
             });
 
-        new_dirs
+        (top_wd, new_dirs)
     }
 
     fn get_full_path(&self, wd: i32, path: &Path) -> PathBuf {
@@ -239,6 +248,7 @@ impl Iterator for Watcher {
                     if guard(self.opts, &full_path, metadata) {
                         self.cached_events = Some(Box::new(
                             self.add_all_watch(&full_path)
+                                .1
                                 .into_iter()
                                 .map(Event::Create),
                         ));
@@ -280,9 +290,19 @@ impl Iterator for Watcher {
             }
             EventKind::DeleteSelf => {
                 self.unwatch_all(inotify_event.wd);
-                self.next()
+                if inotify_event.wd == self.top_wd {
+                    Some(Event::DeleteTop)
+                } else {
+                    self.next()
+                }
             }
-            EventKind::MoveSelf => Some(Event::MoveTop),
+            EventKind::MoveSelf => {
+                if inotify_event.wd == self.top_wd {
+                    Some(Event::MoveTop)
+                } else {
+                    Some(Event::Unknown)
+                }
+            }
             EventKind::Ignored => Some(Event::Ignored),
             _ => Some(Event::Unknown),
         }

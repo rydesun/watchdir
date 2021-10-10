@@ -53,10 +53,17 @@ fn main() {
     info!("initialized successfully and listening to upcoming events...\n");
 
     for event in watcher {
-        if event == watcher::Event::Ignored {
-            continue;
+        match event {
+            watcher::Event::MoveTop => {
+                warn!("Watched dir was moved. The prefix of path can no longer be trusted!");
+            }
+            watcher::Event::DeleteTop => {
+                warn!("Watched dir was deleted.");
+                std::process::exit(0);
+            }
+            watcher::Event::Ignored => continue,
+            _ => print_event(&mut stdout, &mut color_spec, event).unwrap(),
         }
-        print_event(&mut stdout, &mut color_spec, event).unwrap()
     }
 }
 
@@ -90,9 +97,6 @@ fn print_event(
             stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
             write!(stdout, "{:<12}", "MoveInto")?;
             writeln!(stdout, "{:?}", path)?;
-        }
-        watcher::Event::MoveTop => {
-            warn!("Watched dir was moved. The prefix of path can no longer be trusted!");
         }
         _ => {
             stdout.set_color(color_spec.set_fg(Some(Color::Red)))?;
