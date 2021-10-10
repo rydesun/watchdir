@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, str::FromStr};
 
 use clap::{Clap, ValueHint};
 use snafu::{ResultExt, Snafu};
@@ -26,6 +26,31 @@ pub struct Opts {
     /// A level of verbosity, and can be used up to 2 times
     #[clap(short, long, parse(from_occurrences))]
     pub verbose: i32,
+
+    /// When to use colors. WHEN can be 'auto', 'always', 'ansi', or 'never'
+    #[clap(value_name = "WHEN", long, default_value = "auto")]
+    pub color: ColorWhen,
+}
+
+pub enum ColorWhen {
+    Auto,
+    Always,
+    Ansi,
+    Never,
+}
+
+impl FromStr for ColorWhen {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "auto" => Ok(Self::Auto),
+            "always" => Ok(Self::Always),
+            "ansi" => Ok(Self::Ansi),
+            "never" => Ok(Self::Never),
+            _ => Err(Error::OptionColor),
+        }
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -38,6 +63,9 @@ pub enum Error {
 
     #[snafu(display("Permission denied"))]
     PermRead,
+
+    #[snafu(display("Valid values are auto', 'always', 'ansi' or 'never'"))]
+    OptionColor,
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;

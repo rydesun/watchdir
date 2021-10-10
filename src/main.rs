@@ -19,12 +19,20 @@ fn main() {
 
     init_logger(opts.verbose);
 
-    let mut stdout = StandardStream::stdout(if isatty() {
-        ColorChoice::Auto
-    } else {
-        ColorChoice::Never
-    });
     let mut color_spec = ColorSpec::new();
+    let color_choice = match opts.color {
+        cli::ColorWhen::Always => ColorChoice::Always,
+        cli::ColorWhen::Ansi => ColorChoice::AlwaysAnsi,
+        cli::ColorWhen::Auto => {
+            if isatty() {
+                ColorChoice::Auto
+            } else {
+                ColorChoice::Never
+            }
+        }
+        _ => ColorChoice::Never,
+    };
+    let mut stdout = StandardStream::stdout(color_choice);
 
     info!("version: {}", cli::VERSION);
 
