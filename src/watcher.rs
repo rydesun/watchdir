@@ -33,6 +33,7 @@ pub enum Dotdir {
 }
 
 #[derive(Debug, Snafu)]
+#[allow(clippy::enum_variant_names)]
 pub enum Error {
     #[snafu(display("Failed to use inotify API"))]
     InotifyInit,

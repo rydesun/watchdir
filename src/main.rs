@@ -55,7 +55,10 @@ fn main() {
     for event in watcher {
         match event {
             watcher::Event::MoveTop => {
-                warn!("Watched dir was moved. The prefix of path can no longer be trusted!");
+                warn!(
+                    "Watched dir was moved. The prefix of path can no longer \
+                     be trusted!"
+                );
             }
             watcher::Event::DeleteTop => {
                 warn!("Watched dir was deleted.");
