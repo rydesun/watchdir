@@ -87,7 +87,7 @@ impl EventSeq {
     pub fn has_next_event(&mut self) -> bool {
         // HACK: These milliseconds represent the waiting for next event.
         // Consider a more appropriate value.
-        const TIMEOUT: i32 = 10;
+        const TIMEOUT: i32 = 0;
 
         if self.offset >= self.len {
             let n = unsafe { libc::poll(&mut self.pollfd, 1, TIMEOUT) };
