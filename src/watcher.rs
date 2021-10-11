@@ -261,13 +261,16 @@ impl Iterator for Watcher {
                     inotify_event.wd,
                     &inotify_event.path.unwrap(),
                 );
-                self.prev = Some((
-                    EventKind::MoveFrom,
-                    inotify_event.cookie,
-                    full_path,
-                ));
-                // FIXME: too laggy for file moving
-                self.next()
+                if self.event_seq.has_next_event() {
+                    self.prev = Some((
+                        EventKind::MoveFrom,
+                        inotify_event.cookie,
+                        full_path,
+                    ));
+                    self.next()
+                } else {
+                    Some(Event::MoveAway(full_path))
+                }
             }
             EventKind::MoveTo => {
                 let full_path = self.get_full_path(
@@ -552,11 +555,7 @@ mod tests {
         let new_file = unwatched_dir.path().join(random_string(5));
         rename(old_file.to_owned(), new_file.to_owned()).unwrap();
 
-        // FIXME: It is waiting for next event
-        let next_file = top_dir.path().join(random_string(5));
-        File::create(&next_file).unwrap();
         assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
-        assert_eq!(watcher.next().unwrap(), Event::Create(next_file))
     }
 
     #[test]

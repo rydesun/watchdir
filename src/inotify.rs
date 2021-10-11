@@ -16,6 +16,7 @@ const MAX_INOTIFY_EVENT_SIZE: usize =
 
 pub struct EventSeq {
     file: File,
+    pollfd: libc::pollfd,
     buffer: [u8; MAX_INOTIFY_EVENT_SIZE],
     len: usize,
     offset: usize,
@@ -25,6 +26,7 @@ impl EventSeq {
     pub fn new(fd: i32) -> Self {
         Self {
             file: unsafe { File::from_raw_fd(fd) },
+            pollfd: libc::pollfd { fd, events: libc::POLLIN, revents: 0 },
             buffer: [0; MAX_INOTIFY_EVENT_SIZE],
             len: 0,
             offset: 0,
@@ -80,6 +82,19 @@ impl EventSeq {
         debug!(?event);
 
         event
+    }
+
+    pub fn has_next_event(&mut self) -> bool {
+        // HACK: These milliseconds represent the waiting for next event.
+        // Consider a more appropriate value.
+        const TIMEOUT: i32 = 10;
+
+        if self.offset >= self.len {
+            let n = unsafe { libc::poll(&mut self.pollfd, 1, TIMEOUT) };
+            n > 0
+        } else {
+            true
+        }
     }
 }
 
