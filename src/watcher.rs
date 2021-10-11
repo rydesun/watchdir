@@ -168,7 +168,10 @@ impl Watcher {
         for (p, wd) in old_dirs {
             let new_dir = change_ancestor(&p, path);
             self.path_tree.remove(&p);
+
+            // PEFP: terrible performance
             self.path_tree.insert(new_dir.to_owned(), wd);
+
             *self.wds.get_mut(&wd).unwrap() = new_dir;
         }
     }
@@ -369,6 +372,8 @@ fn change_ancestor(p1: &Path, p2: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    extern crate test;
+
     use std::fs::{create_dir, create_dir_all, rename, File};
 
     use rand::distributions::Alphanumeric;
@@ -674,5 +679,46 @@ mod tests {
             assert_eq!(watcher.next().unwrap(), Event::Ignored,);
             sub_dir.pop();
         }
+    }
+
+    #[bench]
+    fn bench_move_dir_with_subdirs(b: &mut test::Bencher) {
+        let top_dir = tempfile::tempdir().unwrap();
+        let mut old_dir = top_dir.path().join(random_string(5));
+        let mut new_dir = top_dir.path().join(random_string(5));
+
+        let mut sub_dirs = PathBuf::new();
+        for _ in 0..100 {
+            sub_dirs.push(random_string(5));
+        }
+        create_dir_all(&old_dir.join(sub_dirs.to_owned())).unwrap();
+
+        let mut watcher =
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
+
+        b.iter(|| {
+            rename(&old_dir, &new_dir).unwrap();
+            watcher.next().unwrap();
+            old_dir = new_dir.to_owned();
+            new_dir = top_dir.path().join(random_string(5));
+        });
+    }
+
+    #[bench]
+    fn bench_move_dir_without_subdirs(b: &mut test::Bencher) {
+        let top_dir = tempfile::tempdir().unwrap();
+        let mut old_dir = top_dir.path().join(random_string(5));
+        let mut new_dir = top_dir.path().join(random_string(5));
+        create_dir(&old_dir).unwrap();
+
+        let mut watcher =
+            Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
+
+        b.iter(|| {
+            rename(&old_dir, &new_dir).unwrap();
+            watcher.next().unwrap();
+            old_dir = new_dir.to_owned();
+            new_dir = top_dir.path().join(random_string(5));
+        });
     }
 }
