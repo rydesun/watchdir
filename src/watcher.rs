@@ -176,7 +176,7 @@ impl Watcher {
         let path = self.wds.get(&wd).unwrap();
         let mut old_dirs = Vec::<(PathBuf, i32)>::new();
         for (p, wd) in self.path_tree.range(path.to_owned()..) {
-            if has_ancestor(p, &path) {
+            if has_ancestor(p, path) {
                 old_dirs.push((p.to_owned(), *wd));
             } else {
                 break;
@@ -230,11 +230,9 @@ impl Iterator for Watcher {
                     self.update_path(inotify_event.wd, &path);
                     return self.next();
                 }
-            } else {
-                if matches!(kind, EventKind::MoveFrom) {
-                    self.cached_inotify_event = Some(inotify_event);
-                    return Some(Event::MoveAway(path));
-                }
+            } else if matches!(kind, EventKind::MoveFrom) {
+                self.cached_inotify_event = Some(inotify_event);
+                return Some(Event::MoveAway(path));
             }
         }
 
@@ -354,10 +352,8 @@ fn change_ancestor(p1: &Path, p2: &Path) -> PathBuf {
     loop {
         let word_1 = p1_comp.next().unwrap();
         let word_2 = p2_comp.next().unwrap();
-        if word_1 == word_2 {
-            res.push(word_2);
-        } else {
-            res.push(word_2);
+        res.push(word_2);
+        if word_1 != word_2 {
             for i in p2_comp {
                 res.push(i);
             }

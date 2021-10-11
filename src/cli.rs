@@ -75,10 +75,9 @@ pub fn parse() -> Result<Opts> {
 
     let metadata = fs::metadata(&opts.dir).context(InvalidPath {})?;
     if !metadata.is_dir() {
-        return Err(Error::NotDir);
-    }
-    if !fs::File::open(&opts.dir).is_ok() {
-        return Err(Error::PermRead);
+        Err(Error::NotDir)
+    } else if fs::File::open(&opts.dir).is_err() {
+        Err(Error::PermRead)
     } else {
         Ok(opts)
     }
