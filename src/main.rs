@@ -1,5 +1,3 @@
-#![feature(test)]
-
 mod cli;
 mod inotify;
 mod watcher;
