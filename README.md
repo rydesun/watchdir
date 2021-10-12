@@ -18,9 +18,6 @@ Use `--hidden` option to supress this behavior.
 watchdir DIR
 ```
 
-**IMPORTANT**: DO NOT watch at a large directory, such as `/` or `~`,
-it do harm to performance.
-
 ## Installation
 
 ```bash
