@@ -39,22 +39,15 @@ impl EventSeq {
         let raw_event: libc::inotify_event =
             unsafe { std::ptr::read(raw.as_ptr() as *const _) };
 
-        let kind = if raw_event.mask & libc::IN_MOVED_FROM > 0 {
-            EventKind::MoveFrom
-        } else if raw_event.mask & libc::IN_MOVED_TO > 0 {
-            EventKind::MoveTo
-        } else if raw_event.mask & libc::IN_CREATE > 0 {
-            EventKind::Create
-        } else if raw_event.mask & libc::IN_MOVE_SELF > 0 {
-            EventKind::MoveSelf
-        } else if raw_event.mask & libc::IN_DELETE > 0 {
-            EventKind::Delete
-        } else if raw_event.mask & libc::IN_DELETE_SELF > 0 {
-            EventKind::DeleteSelf
-        } else if raw_event.mask & libc::IN_IGNORED > 0 {
-            EventKind::Ignored
-        } else {
-            EventKind::Unknown
+        let kind = match raw_event.mask {
+            i if i & libc::IN_MOVED_FROM > 0 => EventKind::MoveFrom,
+            i if i & libc::IN_MOVED_TO > 0 => EventKind::MoveTo,
+            i if i & libc::IN_CREATE > 0 => EventKind::Create,
+            i if i & libc::IN_MOVE_SELF > 0 => EventKind::MoveSelf,
+            i if i & libc::IN_DELETE > 0 => EventKind::Delete,
+            i if i & libc::IN_DELETE_SELF > 0 => EventKind::DeleteSelf,
+            i if i & libc::IN_IGNORED > 0 => EventKind::Ignored,
+            _ => EventKind::Unknown,
         };
         let path = if raw_event.len > 0 {
             let raw_path = unsafe {
