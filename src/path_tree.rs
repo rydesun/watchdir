@@ -2,15 +2,17 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use ahash::AHashMap;
+
 pub struct Head {
     prefix: PathBuf,
-    pair: HashMap<i32, PathBuf>,
+    pair: AHashMap<i32, PathBuf>,
     node: Option<Node>,
 }
 
 impl Head {
     pub fn new(prefix: PathBuf) -> Self {
-        Self { prefix, node: None, pair: HashMap::new() }
+        Self { prefix, node: None, pair: AHashMap::new() }
     }
 
     pub fn get(&mut self, p: &Path) -> Option<&mut Node> {
