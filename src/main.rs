@@ -1,5 +1,6 @@
 mod cli;
 mod inotify;
+mod path_tree;
 mod watcher;
 
 use std::io::Write;

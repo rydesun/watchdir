@@ -1,5 +1,4 @@
 use std::{
-    collections::{BTreeMap, HashMap},
     ffi::CString,
     fs::{self, Metadata},
     os::unix::ffi::OsStrExt,
@@ -12,6 +11,7 @@ use walkdir::WalkDir;
 
 use crate::inotify;
 use crate::inotify::{EventKind, EventSeq};
+use crate::path_tree;
 
 #[derive(PartialEq, Debug)]
 pub enum Event {
@@ -53,8 +53,7 @@ pub struct Watcher {
     opts: WatcherOpts,
     fd: i32,
     top_wd: i32,
-    wds: HashMap<i32, PathBuf>,
-    path_tree: BTreeMap<PathBuf, i32>,
+    path_tree: path_tree::Head,
     event_seq: EventSeq,
     prev: Option<(EventKind, Cookie, PathBuf)>,
     cached_inotify_event: Option<inotify::Event>,
@@ -78,8 +77,7 @@ impl Watcher {
             fd,
             opts: WatcherOpts { sub_dotdir },
             top_wd: 0,
-            wds: HashMap::new(),
-            path_tree: BTreeMap::new(),
+            path_tree: path_tree::Head::new(dir.to_owned()),
             event_seq,
             prev: None,
             cached_inotify_event: None,
@@ -106,12 +104,7 @@ impl Watcher {
             return Err(Error::InotifyAdd { path: path.to_owned() });
         }
 
-        if self.path_tree.insert(path.to_owned(), wd) != None {
-            return Err(Error::InotifyAddDup { wd, path: path.to_owned() });
-        }
-        if self.wds.insert(wd, path.to_owned()) != None {
-            return Err(Error::InotifyAddDup { wd, path: path.to_owned() });
-        };
+        self.path_tree.insert(path, wd);
         Ok(wd)
     }
 
@@ -150,48 +143,19 @@ impl Watcher {
     }
 
     fn get_full_path(&self, wd: i32, path: &Path) -> PathBuf {
-        self.wds[&wd].join(path)
+        self.path_tree.get_full_path(wd, path)
     }
 
     fn update_path(&mut self, wd: i32, path: &Path) {
-        let old_path = self.wds.get(&wd).unwrap().to_owned();
-        *self.wds.get_mut(&wd).unwrap() = path.to_owned();
-
-        let mut old_dirs = Vec::<(PathBuf, i32)>::new();
-        for (p, wd) in self.path_tree.range(old_path.to_owned()..) {
-            if has_ancestor(p, &old_path) {
-                old_dirs.push((p.to_owned(), *wd));
-            } else {
-                break;
-            }
-        }
-        for (p, wd) in old_dirs {
-            let new_dir = change_ancestor(&p, path);
-            self.path_tree.remove(&p);
-
-            // PEFP: terrible performance
-            self.path_tree.insert(new_dir.to_owned(), wd);
-
-            *self.wds.get_mut(&wd).unwrap() = new_dir;
-        }
+        self.path_tree.rename(wd, path)
     }
 
     fn unwatch_all(&mut self, wd: i32) {
-        let path = self.wds.get(&wd).unwrap();
-        let mut old_dirs = Vec::<(PathBuf, i32)>::new();
-        for (p, wd) in self.path_tree.range(path.to_owned()..) {
-            if has_ancestor(p, path) {
-                old_dirs.push((p.to_owned(), *wd));
-            } else {
-                break;
-            }
-        }
-        for (p, wd) in old_dirs {
+        let values = self.path_tree.delete(wd);
+        for wd in values {
             unsafe {
                 libc::inotify_rm_watch(self.fd, wd);
             }
-            self.path_tree.remove(&p);
-            self.wds.remove(&wd);
         }
     }
 }
@@ -316,7 +280,7 @@ impl Iterator for Watcher {
 
 impl Drop for Watcher {
     fn drop(&mut self) {
-        for wd in self.wds.keys() {
+        for wd in self.path_tree.values() {
             unsafe { libc::inotify_rm_watch(self.fd, *wd) };
         }
     }
@@ -332,42 +296,6 @@ fn guard(opts: WatcherOpts, path: &Path, metadata: Metadata) -> bool {
     } else {
         true
     }
-}
-
-fn has_ancestor(p1: &Path, p2: &Path) -> bool {
-    let mut p1_iter = p1.components();
-    for i in p2.components() {
-        if let Some(j) = p1_iter.next() {
-            if i != j {
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
-    true
-}
-
-// PERF: bad performance
-fn change_ancestor(p1: &Path, p2: &Path) -> PathBuf {
-    let mut res = PathBuf::new();
-    let mut p1_comp = p1.components();
-    let mut p2_comp = p2.components();
-    loop {
-        let word_1 = p1_comp.next().unwrap();
-        let word_2 = p2_comp.next().unwrap();
-        res.push(word_2);
-        if word_1 != word_2 {
-            for i in p2_comp {
-                res.push(i);
-            }
-            break;
-        }
-    }
-    for i in p1_comp {
-        res.push(i);
-    }
-    res
 }
 
 #[cfg(test)]
