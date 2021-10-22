@@ -5,9 +5,13 @@ mod watcher;
 
 use std::io::Write;
 
+use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     let opts = match cli::parse() {
