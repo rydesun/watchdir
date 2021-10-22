@@ -37,7 +37,7 @@ impl Head {
         let values =
             self.node.as_mut().unwrap().delete(rest).unwrap().values();
         for v in &values {
-            self.pair.remove(&v);
+            self.pair.remove(v);
         }
         values
     }
@@ -78,7 +78,7 @@ pub struct Node {
 
 impl Node {
     fn new(key: OsString, value: i32) -> Self {
-        Self { key: key.to_owned(), value, children: HashMap::new() }
+        Self { key, value, children: HashMap::new() }
     }
 
     fn get(&mut self, kms: &Path) -> Option<&mut Self> {
@@ -109,14 +109,10 @@ impl Node {
         let mut values = Vec::new();
         let mut stack = vec![self];
 
-        loop {
-            if let Some(node) = stack.pop() {
-                values.push(node.value);
-                for v in node.children.values() {
-                    stack.push(v);
-                }
-            } else {
-                break;
+        while let Some(node) = stack.pop() {
+            values.push(node.value);
+            for v in node.children.values() {
+                stack.push(v);
             }
         }
 
