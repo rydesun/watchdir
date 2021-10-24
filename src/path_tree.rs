@@ -165,14 +165,9 @@ impl Node {
         let mut temp = vec![self.key.to_owned()];
 
         let mut cur = self.parent.upgrade();
-        loop {
-            match cur {
-                Some(node) => {
-                    temp.push(node.borrow().key.to_owned());
-                    cur = node.borrow_mut().parent.upgrade();
-                }
-                None => break,
-            };
+        while let Some(node) = cur {
+            temp.push(node.borrow().key.to_owned());
+            cur = node.borrow_mut().parent.upgrade();
         }
         for i in temp.iter().rev() {
             path.push(i);
