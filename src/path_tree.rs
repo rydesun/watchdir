@@ -8,18 +8,21 @@ use std::{
 
 use ahash::AHashMap;
 
-pub struct Head {
+pub struct Head<T> {
     prefix: PathBuf,
-    table: AHashMap<i32, Rc<RefCell<Node>>>,
-    tree: Option<Rc<RefCell<Node>>>,
+    table: AHashMap<T, Rc<RefCell<Node<T>>>>,
+    tree: Option<Rc<RefCell<Node<T>>>>,
 }
 
-impl Head {
+impl<T> Head<T>
+where
+    T: std::hash::Hash + std::cmp::Eq + Copy,
+{
     pub fn new(prefix: PathBuf) -> Self {
         Self { prefix, tree: None, table: AHashMap::new() }
     }
 
-    pub fn insert(&mut self, path: &Path, value: i32) {
+    pub fn insert(&mut self, path: &Path, value: T) {
         let path_rest = path.strip_prefix(&self.prefix).unwrap();
         let new_node = match &self.tree {
             Some(node) => Node::insert(Rc::clone(node), path_rest, value),
@@ -36,7 +39,7 @@ impl Head {
         self.table.insert(value, new_node);
     }
 
-    pub fn delete(&mut self, value: i32) -> Vec<i32> {
+    pub fn delete(&mut self, value: T) -> Vec<T> {
         let node = self.table.get(&value).unwrap();
         let path = node.borrow().path();
         let path_rest = path.strip_prefix(&self.prefix).unwrap();
@@ -51,7 +54,7 @@ impl Head {
         values
     }
 
-    pub fn rename(&self, value: i32, new_path: &Path) {
+    pub fn rename(&self, value: T, new_path: &Path) {
         let node = self.table.get(&value).unwrap();
         let old_path = node.borrow().path();
         let old_path_rest = old_path.strip_prefix(&self.prefix).unwrap();
@@ -63,27 +66,30 @@ impl Head {
         );
     }
 
-    pub fn get_full_path(&self, value: i32, path: &Path) -> PathBuf {
+    pub fn get_full_path(&self, value: T, path: &Path) -> PathBuf {
         self.table[&value].borrow().path().join(path)
     }
 
-    pub fn values(&self) -> impl Iterator<Item = &i32> {
+    pub fn values(&self) -> impl Iterator<Item = &T> {
         self.table.keys()
     }
 }
 
-pub struct Node {
+pub struct Node<T> {
     key: OsString,
-    value: i32,
-    parent: Weak<RefCell<Node>>,
-    children: HashMap<OsString, Rc<RefCell<Node>>>,
+    value: T,
+    parent: Weak<RefCell<Node<T>>>,
+    children: HashMap<OsString, Rc<RefCell<Node<T>>>>,
 }
 
-impl Node {
+impl<T> Node<T>
+where
+    T: std::hash::Hash + std::cmp::Eq + Copy,
+{
     fn new(
         key: OsString,
-        value: i32,
-        parent: Option<&Rc<RefCell<Node>>>,
+        value: T,
+        parent: Option<&Rc<RefCell<Node<T>>>>,
     ) -> Self {
         Self {
             key,
@@ -110,8 +116,8 @@ impl Node {
     fn insert(
         self_: Rc<RefCell<Self>>,
         path: &Path,
-        value: i32,
-    ) -> Rc<RefCell<Node>> {
+        value: T,
+    ) -> Rc<RefCell<Node<T>>> {
         let parent = Self::get(self_, path.parent().unwrap()).unwrap();
 
         let key = path.file_name().unwrap();
@@ -145,9 +151,9 @@ impl Node {
         parent.borrow_mut().children.insert(new_name.to_owned(), node);
     }
 
-    fn values(&self) -> Vec<i32> {
+    fn values(&self) -> Vec<T> {
         let mut values = vec![self.value];
-        let mut stack: Vec<Rc<RefCell<Node>>> =
+        let mut stack: Vec<Rc<RefCell<Node<T>>>> =
             self.children.values().map(Rc::clone).collect();
 
         while let Some(node) = stack.pop() {

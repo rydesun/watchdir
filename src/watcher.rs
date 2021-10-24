@@ -53,7 +53,7 @@ pub struct Watcher {
     opts: WatcherOpts,
     fd: i32,
     top_wd: i32,
-    path_tree: path_tree::Head,
+    path_tree: path_tree::Head<i32>,
     event_seq: EventSeq,
     prev: Option<(EventKind, Cookie, PathBuf)>,
     cached_inotify_event: Option<inotify::Event>,
