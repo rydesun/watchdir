@@ -27,6 +27,10 @@ pub struct Opts {
     #[clap(short, long, parse(from_occurrences))]
     pub verbose: i32,
 
+    /// Also includes modification events
+    #[clap(long)]
+    pub modify_event: bool,
+
     /// When to use colors. WHEN can be 'auto', 'always', 'ansi', or 'never'
     #[clap(value_name = "WHEN", long, default_value = "auto")]
     pub color: ColorWhen,

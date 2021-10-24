@@ -62,12 +62,13 @@ pub struct Watcher {
 }
 
 #[derive(Copy, Clone)]
-struct WatcherOpts {
-    sub_dotdir: Dotdir,
+pub struct WatcherOpts {
+    pub sub_dotdir: Dotdir,
+    pub modify_event: bool,
 }
 
 impl Watcher {
-    pub fn new(dir: &Path, sub_dotdir: Dotdir) -> Result<Self> {
+    pub fn new(dir: &Path, opts: WatcherOpts) -> Result<Self> {
         let fd = unsafe { libc::inotify_init() };
         if fd < 0 {
             return Err(Error::InotifyInit);
@@ -76,7 +77,7 @@ impl Watcher {
 
         let mut watcher = Self {
             fd,
-            opts: WatcherOpts { sub_dotdir },
+            opts,
             top_wd: 0,
             path_tree: path_tree::Head::new(dir.to_owned()),
             event_seq,
@@ -93,12 +94,14 @@ impl Watcher {
 
     fn add_watch(&mut self, path: &Path) -> Result<i32> {
         let ffi_path = CString::new(path.as_os_str().as_bytes()).unwrap();
-        let event_types = libc::IN_CREATE
+        let mut event_types = libc::IN_CREATE
             | libc::IN_MOVE
             | libc::IN_MOVE_SELF
             | libc::IN_DELETE
-            | libc::IN_DELETE_SELF
-            | libc::IN_MODIFY;
+            | libc::IN_DELETE_SELF;
+        if self.opts.modify_event {
+            event_types |= libc::IN_MODIFY;
+        }
         let wd = unsafe {
             libc::inotify_add_watch(self.fd, ffi_path.as_ptr(), event_types)
         };

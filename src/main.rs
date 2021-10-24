@@ -41,20 +41,21 @@ fn main() {
 
     info!("version: {}", cli::VERSION);
 
-    let watcher = match watcher::Watcher::new(
-        &opts.dir,
-        if opts.hidden {
-            watcher::Dotdir::Include
-        } else {
-            watcher::Dotdir::Exclude
-        },
-    ) {
-        Ok(watcher) => watcher,
-        Err(e) => {
-            error!("{}", e);
-            std::process::exit(1);
-        }
-    };
+    let watcher =
+        match watcher::Watcher::new(&opts.dir, watcher::WatcherOpts {
+            modify_event: opts.modify_event,
+            sub_dotdir: if opts.hidden {
+                watcher::Dotdir::Include
+            } else {
+                watcher::Dotdir::Exclude
+            },
+        }) {
+            Ok(watcher) => watcher,
+            Err(e) => {
+                error!("{}", e);
+                std::process::exit(1);
+            }
+        };
     info!("initialized successfully and listening to upcoming events...\n");
 
     for event in watcher {
