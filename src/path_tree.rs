@@ -103,10 +103,7 @@ impl Node {
         let mut path = path.components();
         path.try_fold(self_, |acc, i| {
             let acc = acc.borrow();
-            match acc.children.get(i.as_os_str()) {
-                Some(node) => Some(Rc::clone(node)),
-                None => None,
-            }
+            acc.children.get(i.as_os_str()).map(Rc::clone)
         })
     }
 
@@ -151,7 +148,7 @@ impl Node {
     fn values(&self) -> Vec<i32> {
         let mut values = vec![self.value];
         let mut stack: Vec<Rc<RefCell<Node>>> =
-            self.children.values().map(|c| Rc::clone(c)).collect();
+            self.children.values().map(Rc::clone).collect();
 
         while let Some(node) = stack.pop() {
             let node = node.borrow();

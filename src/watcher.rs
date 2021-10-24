@@ -481,7 +481,7 @@ mod tests {
             Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_file = unwatched_dir.path().join(random_string(5));
-        rename(old_file.to_owned(), new_file.to_owned()).unwrap();
+        rename(old_file.to_owned(), new_file).unwrap();
 
         assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
     }
@@ -497,7 +497,7 @@ mod tests {
             Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_dir = top_dir.path().join(random_string(5));
-        rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
+        rename(old_dir, new_dir.to_owned()).unwrap();
 
         assert_eq!(
             watcher.next().unwrap(),
@@ -520,7 +520,7 @@ mod tests {
             Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_file = top_dir.path().join(random_string(5));
-        rename(old_file.to_owned(), new_file.to_owned()).unwrap();
+        rename(old_file, new_file.to_owned()).unwrap();
 
         assert_eq!(watcher.next().unwrap(), Event::MoveInto(new_file));
     }
@@ -542,9 +542,9 @@ mod tests {
             Watcher::new(top_dir.as_ref(), Dotdir::Exclude).unwrap();
 
         let new_file = unwatched_dir.path().join(random_string(5));
-        rename(old_file.to_owned(), new_file.to_owned()).unwrap();
+        rename(old_file.to_owned(), new_file).unwrap();
         let next_new_file = top_dir.path().join(next_file_name);
-        rename(next_old_file.to_owned(), next_new_file.to_owned()).unwrap();
+        rename(next_old_file, next_new_file.to_owned()).unwrap();
 
         assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
         assert_eq!(watcher.next().unwrap(), Event::MoveInto(next_new_file))
