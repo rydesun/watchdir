@@ -106,6 +106,11 @@ fn print_event(
             write!(stdout, "{:<12}", "MoveInto")?;
             writeln!(stdout, "{:?}", path)?;
         }
+        watcher::Event::Modify(path) => {
+            stdout.set_color(color_spec.set_fg(Some(Color::Yellow)))?;
+            write!(stdout, "{:<12}", "Modify")?;
+            writeln!(stdout, "{:?}", path)?;
+        }
         _ => {
             stdout.set_color(color_spec.set_fg(Some(Color::Red)))?;
             writeln!(stdout, "Unknown")?;

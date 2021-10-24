@@ -21,6 +21,7 @@ pub enum Event {
     MoveInto(PathBuf),
     MoveTop,
     Delete(PathBuf),
+    Modify(PathBuf),
     DeleteTop,
     Ignored,
     Unknown,
@@ -96,7 +97,8 @@ impl Watcher {
             | libc::IN_MOVE
             | libc::IN_MOVE_SELF
             | libc::IN_DELETE
-            | libc::IN_DELETE_SELF;
+            | libc::IN_DELETE_SELF
+            | libc::IN_MODIFY;
         let wd = unsafe {
             libc::inotify_add_watch(self.fd, ffi_path.as_ptr(), event_types)
         };
@@ -271,6 +273,13 @@ impl Iterator for Watcher {
                 } else {
                     Some(Event::Unknown)
                 }
+            }
+            EventKind::Modify => {
+                let full_path = self.get_full_path(
+                    inotify_event.wd,
+                    &inotify_event.path.unwrap(),
+                );
+                Some(Event::Modify(full_path))
             }
             EventKind::Ignored => Some(Event::Ignored),
             _ => Some(Event::Unknown),

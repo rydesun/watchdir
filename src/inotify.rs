@@ -46,6 +46,7 @@ impl EventSeq {
             i if i & libc::IN_MOVE_SELF > 0 => EventKind::MoveSelf,
             i if i & libc::IN_DELETE > 0 => EventKind::Delete,
             i if i & libc::IN_DELETE_SELF > 0 => EventKind::DeleteSelf,
+            i if i & libc::IN_MODIFY > 0 => EventKind::Modify,
             i if i & libc::IN_IGNORED > 0 => EventKind::Ignored,
             _ => EventKind::Unknown,
         };
@@ -126,6 +127,7 @@ pub enum EventKind {
     Create,
     Delete,
     DeleteSelf,
+    Modify,
     Ignored,
     Unknown,
 }
