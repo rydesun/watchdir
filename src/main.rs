@@ -83,42 +83,30 @@ fn print_event(
     color_spec: &mut ColorSpec,
     event: watcher::Event,
 ) -> Result<(), std::io::Error> {
-    match event {
+    let (head, content, color) = match event {
         watcher::Event::Create(path) => {
-            stdout.set_color(color_spec.set_fg(Some(Color::Green)))?;
-            write!(stdout, "{:<12}", "Create")?;
-            writeln!(stdout, "{:?}", path)?;
+            ("Create", format!("{:?}", path), Color::Green)
         }
         watcher::Event::Delete(path) => {
-            stdout.set_color(color_spec.set_fg(Some(Color::Red)))?;
-            write!(stdout, "{:<12}", "Delete")?;
-            writeln!(stdout, "{:?}", path)?;
+            ("Delete", format!("{:?}", path), Color::Red)
         }
         watcher::Event::Move(from, to) => {
-            stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
-            write!(stdout, "{:<12}", "Move")?;
-            writeln!(stdout, "{:?} -> {:?}", from, to)?;
+            ("Move", format!("{:?} -> {:?}", from, to), Color::Blue)
         }
         watcher::Event::MoveAway(path) => {
-            stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
-            write!(stdout, "{:<12}", "MoveAway")?;
-            writeln!(stdout, "{:?}", path)?;
+            ("MoveAway", format!("{:?}", path), Color::Blue)
         }
         watcher::Event::MoveInto(path) => {
-            stdout.set_color(color_spec.set_fg(Some(Color::Blue)))?;
-            write!(stdout, "{:<12}", "MoveInto")?;
-            writeln!(stdout, "{:?}", path)?;
+            ("MoveInto", format!("{:?}", path), Color::Blue)
         }
         watcher::Event::Modify(path) => {
-            stdout.set_color(color_spec.set_fg(Some(Color::Yellow)))?;
-            write!(stdout, "{:<12}", "Modify")?;
-            writeln!(stdout, "{:?}", path)?;
+            ("Modify", format!("{:?}", path), Color::Yellow)
         }
-        _ => {
-            stdout.set_color(color_spec.set_fg(Some(Color::Red)))?;
-            writeln!(stdout, "Unknown")?;
-        }
-    }
+        _ => ("Unknown", "".to_owned(), Color::Red),
+    };
+    stdout.set_color(color_spec.set_fg(Some(color)))?;
+    write!(stdout, "{:<12}", head)?;
+    writeln!(stdout, "{}", content)?;
     Ok(())
 }
 
