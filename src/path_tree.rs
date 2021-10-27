@@ -70,8 +70,12 @@ where
             .strip_prefix(&self.prefix)
             .context(PrefixMismatched { path: path.to_owned() })?;
         let values = {
-            let tree = self.tree.as_ref().context(EmptyTree)?;
-            Node::pop(Rc::clone(tree), path_rest)?.borrow().values()
+            if path_rest.as_os_str().is_empty() {
+                self.tree.take().unwrap().borrow().values()
+            } else {
+                let tree = self.tree.as_ref().context(EmptyTree)?;
+                Node::pop(Rc::clone(tree), path_rest)?.borrow().values()
+            }
         };
         for v in &values {
             self.table.remove(v);
