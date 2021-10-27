@@ -19,10 +19,10 @@ pub enum Event {
     Move(PathBuf, PathBuf),
     MoveAway(PathBuf),
     MoveInto(PathBuf),
-    MoveTop,
+    MoveTop(PathBuf),
     Delete(PathBuf),
     Modify(PathBuf),
-    DeleteTop,
+    DeleteTop(PathBuf),
     Ignored,
     Unknown,
 }
@@ -53,6 +53,7 @@ type Cookie = u32;
 pub struct Watcher {
     opts: WatcherOpts,
     fd: i32,
+    top_dir: PathBuf,
     top_wd: i32,
     path_tree: path_tree::Head<i32>,
     event_seq: EventSeq,
@@ -93,6 +94,7 @@ impl Watcher {
         let mut watcher = Self {
             fd,
             opts,
+            top_dir: dir.to_owned(),
             top_wd: 0,
             path_tree: path_tree::Head::new(dir.to_owned()),
             event_seq,
@@ -276,14 +278,14 @@ impl Iterator for Watcher {
             EventKind::DeleteSelf => {
                 self.unwatch_all(inotify_event.wd);
                 if inotify_event.wd == self.top_wd {
-                    Some(Event::DeleteTop)
+                    Some(Event::DeleteTop(self.top_dir.to_owned()))
                 } else {
                     self.next()
                 }
             }
             EventKind::MoveSelf => {
                 if inotify_event.wd == self.top_wd {
-                    Some(Event::MoveTop)
+                    Some(Event::MoveTop(self.top_dir.to_owned()))
                 } else {
                     Some(Event::Unknown)
                 }

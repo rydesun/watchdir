@@ -62,19 +62,21 @@ fn main() {
 
     for event in watcher {
         match event {
-            watcher::Event::MoveTop => {
+            watcher::Event::MoveTop(_) => {
                 warn!(
                     "Watched dir was moved. The prefix of path can no longer \
                      be trusted!"
                 );
             }
-            watcher::Event::DeleteTop => {
+            watcher::Event::DeleteTop(_) => {
+                print_event(&mut stdout, &mut color_spec, event).unwrap();
                 warn!("Watched dir was deleted.");
                 std::process::exit(0);
             }
             watcher::Event::Ignored => continue,
-            _ => print_event(&mut stdout, &mut color_spec, event).unwrap(),
+            _ => {}
         }
+        print_event(&mut stdout, &mut color_spec, event).unwrap();
     }
 }
 
@@ -88,7 +90,7 @@ fn print_event(
             ("Create", format!("{:?}", path), Color::Green)
         }
         watcher::Event::Delete(path) => {
-            ("Delete", format!("{:?}", path), Color::Red)
+            ("Delete", format!("{:?}", path), Color::Magenta)
         }
         watcher::Event::Move(from, to) => {
             ("Move", format!("{:?} -> {:?}", from, to), Color::Blue)
@@ -101,6 +103,12 @@ fn print_event(
         }
         watcher::Event::Modify(path) => {
             ("Modify", format!("{:?}", path), Color::Yellow)
+        }
+        watcher::Event::MoveTop(path) => {
+            ("MoveTop", format!("{:?}", path), Color::Red)
+        }
+        watcher::Event::DeleteTop(path) => {
+            ("DeleteTop", format!("{:?}", path), Color::Red)
         }
         _ => ("Unknown", "".to_owned(), Color::Red),
     };
