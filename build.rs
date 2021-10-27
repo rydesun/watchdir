@@ -8,8 +8,12 @@ fn main() {
         println!("cargo:rustc-env=GIT_SHA={}", git_sha);
     }
 
-    let utc = Utc::now();
-    println!("cargo:rustc-env=BUILD_DATE={}", utc);
+    println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
+    let time = match env::var("SOURCE_DATE_EPOCH") {
+        Ok(t) => t.parse::<i64>().unwrap(),
+        _ => Utc::now().timestamp(),
+    };
+    println!("cargo:rustc-env=BUILD_DATE={}", time);
 }
 
 fn get_git_sha() -> Option<String> {
