@@ -7,6 +7,27 @@ use std::{
 };
 
 use ahash::AHashMap;
+use snafu::*;
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("The prefixes of paths are mismatched: {}", path.display()))]
+    PrefixMismatched { source: std::path::StripPrefixError, path: PathBuf },
+
+    #[snafu(display("Unknown value"))]
+    ValueNotFound,
+
+    #[snafu(display("Path tree is empty"))]
+    EmptyTree,
+
+    #[snafu(display("Unknown path: {}", path.display()))]
+    PathNotFound { path: PathBuf },
+
+    #[snafu(display("invalid path: {}", path.display()))]
+    InvalidPath { path: PathBuf },
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct Head<T> {
     prefix: PathBuf,
@@ -22,10 +43,12 @@ where
         Self { prefix, tree: None, table: AHashMap::new() }
     }
 
-    pub fn insert(&mut self, path: &Path, value: T) {
-        let path_rest = path.strip_prefix(&self.prefix).unwrap();
+    pub fn insert(&mut self, path: &Path, value: T) -> Result<()> {
+        let path_rest = path
+            .strip_prefix(&self.prefix)
+            .context(PrefixMismatched { path })?;
         let new_node = match &self.tree {
-            Some(node) => Node::insert(Rc::clone(node), path_rest, value),
+            Some(node) => Node::insert(Rc::clone(node), path_rest, value)?,
             None => {
                 let node = Rc::new(RefCell::new(Node::new(
                     path.as_os_str().to_owned(),
@@ -37,33 +60,36 @@ where
             }
         };
         self.table.insert(value, new_node);
+        Ok(())
     }
 
-    pub fn delete(&mut self, value: T) -> Vec<T> {
-        let node = self.table.get(&value).unwrap();
+    pub fn delete(&mut self, value: T) -> Result<Vec<T>> {
+        let node = self.table.get(&value).context(ValueNotFound)?;
         let path = node.borrow().path();
-        let path_rest = path.strip_prefix(&self.prefix).unwrap();
-        let values =
-            Node::pop(Rc::clone(self.tree.as_ref().unwrap()), path_rest)
-                .unwrap()
-                .borrow()
-                .values();
+        let path_rest = path
+            .strip_prefix(&self.prefix)
+            .context(PrefixMismatched { path: path.to_owned() })?;
+        let values = {
+            let tree = self.tree.as_ref().context(EmptyTree)?;
+            Node::pop(Rc::clone(tree), path_rest)?.borrow().values()
+        };
         for v in &values {
             self.table.remove(v);
         }
-        values
+        Ok(values)
     }
 
-    pub fn rename(&self, value: T, new_path: &Path) {
-        let node = self.table.get(&value).unwrap();
+    pub fn rename(&self, value: T, new_path: &Path) -> Result<()> {
+        let node = self.table.get(&value).context(ValueNotFound)?;
         let old_path = node.borrow().path();
-        let old_path_rest = old_path.strip_prefix(&self.prefix).unwrap();
-        let new_path_rest = new_path.strip_prefix(&self.prefix).unwrap();
-        Node::rename(
-            Rc::clone(self.tree.as_ref().unwrap()),
-            old_path_rest,
-            new_path_rest,
-        );
+        let old_path_rest = old_path
+            .strip_prefix(&self.prefix)
+            .context(PrefixMismatched { path: old_path.to_owned() })?;
+        let new_path_rest = new_path
+            .strip_prefix(&self.prefix)
+            .context(PrefixMismatched { path: new_path })?;
+        let tree = self.tree.as_ref().context(EmptyTree)?;
+        Node::rename(Rc::clone(tree), old_path_rest, new_path_rest)
     }
 
     pub fn get_full_path(&self, value: T, path: &Path) -> PathBuf {
@@ -117,10 +143,12 @@ where
         self_: Rc<RefCell<Self>>,
         path: &Path,
         value: T,
-    ) -> Rc<RefCell<Node<T>>> {
-        let parent = Self::get(self_, path.parent().unwrap()).unwrap();
-
-        let key = path.file_name().unwrap();
+    ) -> Result<Rc<RefCell<Node<T>>>> {
+        let parent = {
+            let p = path.parent().context(InvalidPath { path })?;
+            Self::get(self_, p).context(PathNotFound { path })?
+        };
+        let key = path.file_name().context(InvalidPath { path })?;
         let node = Rc::new(RefCell::new(Self::new(
             key.to_owned(),
             value,
@@ -129,26 +157,40 @@ where
 
         parent.borrow_mut().children.insert(key.to_owned(), Rc::clone(&node));
 
-        node
+        Ok(node)
     }
 
     fn pop(
         self_: Rc<RefCell<Self>>,
         path: &Path,
-    ) -> Option<Rc<RefCell<Self>>> {
-        let parent = Self::get(self_, path.parent().unwrap())?;
-        let x = parent.borrow_mut().children.remove(path.file_name().unwrap());
-        x
+    ) -> Result<Rc<RefCell<Self>>> {
+        let name = path.file_name().context(InvalidPath { path })?;
+        let parent = {
+            let p = path.parent().context(InvalidPath { path })?;
+            Self::get(self_, p).context(PathNotFound { path })?
+        };
+        let mut p = parent.borrow_mut();
+        p.children.remove(name).context(PathNotFound { path })
     }
 
-    fn rename(self_: Rc<RefCell<Self>>, old_path: &Path, new_path: &Path) {
-        let node = Self::pop(Rc::clone(&self_), old_path).unwrap();
-        let parent = Self::get(self_, new_path.parent().unwrap()).unwrap();
+    fn rename(
+        self_: Rc<RefCell<Self>>,
+        old_path: &Path,
+        new_path: &Path,
+    ) -> Result<()> {
+        let node = Self::pop(Rc::clone(&self_), old_path)?;
+        let parent = {
+            let p =
+                new_path.parent().context(InvalidPath { path: new_path })?;
+            Self::get(self_, p).context(PathNotFound { path: new_path })?
+        };
 
-        let new_name = new_path.file_name().unwrap();
+        let new_name =
+            new_path.file_name().context(InvalidPath { path: new_path })?;
         node.borrow_mut().key = new_name.to_owned();
         node.borrow_mut().parent = Rc::downgrade(&parent);
         parent.borrow_mut().children.insert(new_name.to_owned(), node);
+        Ok(())
     }
 
     fn values(&self) -> Vec<T> {

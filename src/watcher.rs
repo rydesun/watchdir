@@ -120,7 +120,7 @@ impl Watcher {
             return Err(Error::InotifyAdd { path: path.to_owned() });
         }
 
-        self.path_tree.insert(path, wd);
+        self.path_tree.insert(path, wd).unwrap();
         Ok(wd)
     }
 
@@ -163,11 +163,11 @@ impl Watcher {
     }
 
     fn update_path(&mut self, wd: i32, path: &Path) {
-        self.path_tree.rename(wd, path)
+        self.path_tree.rename(wd, path).unwrap()
     }
 
     fn unwatch_all(&mut self, wd: i32) {
-        let values = self.path_tree.delete(wd);
+        let values = self.path_tree.delete(wd).unwrap();
         for wd in values {
             unsafe {
                 libc::inotify_rm_watch(self.fd, wd);
