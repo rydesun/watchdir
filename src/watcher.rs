@@ -39,8 +39,8 @@ pub enum Error {
     #[snafu(display("Failed to use inotify API"))]
     InotifyInit,
 
-    #[snafu(display("Failed to watch: {}", path.display()))]
-    InotifyAdd { path: PathBuf },
+    #[snafu(display("Failed to watch: {}: {}", path.display(), source))]
+    InotifyAdd { source: std::io::Error, path: PathBuf },
 
     #[snafu(display("Duplicated watch: {}", path.display()))]
     InotifyAddDup { wd: i32, path: PathBuf },
@@ -119,7 +119,10 @@ impl Watcher {
             )
         };
         if wd < 0 {
-            return Err(Error::InotifyAdd { path: path.to_owned() });
+            return Err(Error::InotifyAdd {
+                source: std::io::Error::last_os_error(),
+                path: path.to_owned(),
+            });
         }
 
         self.path_tree.insert(path, wd).unwrap();
