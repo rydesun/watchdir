@@ -22,23 +22,23 @@ fn main() {
         }
     };
 
-    init_logger(opts.verbose);
-
     let mut color_spec = ColorSpec::new();
-    let color_choice = match opts.color {
-        cli::ColorWhen::Always => ColorChoice::Always,
-        cli::ColorWhen::Ansi => ColorChoice::AlwaysAnsi,
-        cli::ColorWhen::Auto => {
-            if isatty() {
+    let (color_choice, log_color) = match opts.color {
+        cli::ColorWhen::Always => (ColorChoice::Always, true),
+        cli::ColorWhen::Ansi => (ColorChoice::AlwaysAnsi, true),
+        cli::ColorWhen::Auto => (
+            if isatty_stdout() {
                 ColorChoice::Auto
             } else {
                 ColorChoice::Never
-            }
-        }
-        _ => ColorChoice::Never,
+            },
+            isatty_stderr(),
+        ),
+        _ => (ColorChoice::Never, false),
     };
     let mut stdout = StandardStream::stdout(color_choice);
 
+    init_logger(opts.verbose, log_color);
     info!("version: {}", cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
@@ -118,8 +118,10 @@ fn print_event(
     Ok(())
 }
 
-fn init_logger(verbose_level: i32) {
-    let subscriber = tracing_subscriber::fmt().with_writer(std::io::stderr);
+fn init_logger(verbose_level: i32, color: bool) {
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_ansi(color);
     match verbose_level {
         0 => subscriber.init(),
         1 => subscriber
@@ -132,6 +134,10 @@ fn init_logger(verbose_level: i32) {
     };
 }
 
-fn isatty() -> bool {
+fn isatty_stdout() -> bool {
     unsafe { libc::isatty(libc::STDOUT_FILENO) != 0 }
+}
+
+fn isatty_stderr() -> bool {
+    unsafe { libc::isatty(libc::STDERR_FILENO) != 0 }
 }
