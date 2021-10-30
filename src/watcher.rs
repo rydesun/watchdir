@@ -225,7 +225,7 @@ impl Iterator for Watcher {
                 if matches!(kind, EventKind::MoveFrom) {
                     self.unwatch_all(inotify_event.wd);
                     return Some(Event::MoveAway(path));
-                } else {
+                } else if inotify_event.wd != self.top_wd {
                     self.update_path(inotify_event.wd, &path);
                     return self.next();
                 }
