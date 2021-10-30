@@ -1,4 +1,9 @@
-use std::{fs, path::PathBuf, str::FromStr};
+use std::{
+    fs,
+    ops::Deref,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use clap::{Clap, ValueHint};
 use snafu::{ResultExt, Snafu};
@@ -20,8 +25,8 @@ pub struct Opts {
     pub include_hidden: bool,
 
     /// Directory to watch
-    #[clap(name = "DIR", parse(from_os_str), value_hint = ValueHint::DirPath)]
-    pub dir: PathBuf,
+    #[clap(name = "DIR", value_hint = ValueHint::DirPath)]
+    pub dir: Dir,
 
     /// Show debug messages
     #[clap(long)]
@@ -57,6 +62,32 @@ impl FromStr for ColorWhen {
     }
 }
 
+pub struct Dir(PathBuf);
+
+impl Deref for Dir {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_path()
+    }
+}
+
+impl FromStr for Dir {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let path = PathBuf::from(s);
+        let metadata = fs::metadata(&path).context(InvalidPath {})?;
+        if !metadata.is_dir() {
+            Err(Error::NotDir)
+        } else if fs::File::open(&path).is_err() {
+            Err(Error::PermRead)
+        } else {
+            Ok(Self(path))
+        }
+    }
+}
+
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("{}", source))]
@@ -73,16 +104,3 @@ pub enum Error {
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
-
-pub fn parse() -> Result<Opts> {
-    let opts = Opts::parse();
-
-    let metadata = fs::metadata(&opts.dir).context(InvalidPath {})?;
-    if !metadata.is_dir() {
-        Err(Error::NotDir)
-    } else if fs::File::open(&opts.dir).is_err() {
-        Err(Error::PermRead)
-    } else {
-        Ok(opts)
-    }
-}

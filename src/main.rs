@@ -3,8 +3,9 @@ mod inotify;
 mod path_tree;
 mod watcher;
 
-use std::io::Write;
+use std::{io::Write, ops::Deref};
 
+use clap::Clap;
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, warn, Level};
@@ -14,35 +15,21 @@ use tracing_subscriber::EnvFilter;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
-    let opts = match cli::parse() {
-        Ok(opts) => opts,
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
-    };
+    let opts = cli::Opts::parse();
 
     let mut color_spec = ColorSpec::new();
-    let (color_choice, log_color) = match opts.color {
-        cli::ColorWhen::Always => (ColorChoice::Always, true),
-        cli::ColorWhen::Ansi => (ColorChoice::AlwaysAnsi, true),
-        cli::ColorWhen::Auto => (
-            if isatty_stdout() {
-                ColorChoice::Auto
-            } else {
-                ColorChoice::Never
-            },
-            isatty_stderr(),
-        ),
-        _ => (ColorChoice::Never, false),
-    };
-    let mut stdout = StandardStream::stdout(color_choice);
+    let mut stdout = StandardStream::stdout((&opts.color).into());
 
-    init_logger(opts.debug, log_color);
+    init_logger(opts.debug, match opts.color {
+        cli::ColorWhen::Always => true,
+        cli::ColorWhen::Ansi => true,
+        cli::ColorWhen::Auto => isatty_stderr(),
+        cli::ColorWhen::Never => false,
+    });
     info!("version: {}", cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
-        &opts.dir,
+        opts.dir.deref(),
         watcher::WatcherOpts::new(
             opts.include_hidden.into(),
             opts.modify_event,
@@ -106,7 +93,7 @@ fn print_event(
         watcher::Event::DeleteTop(path) => {
             ("DeleteTop", format!("{:?}", path), Color::Red)
         }
-        _ => ("Unknown", "".to_owned(), Color::Red),
+        _ => ("Unknown", "".into(), Color::Red),
     };
     stdout.set_color(color_spec.set_fg(Some(color)))?;
     write!(stdout, "{:<12}", head)?;
@@ -133,4 +120,21 @@ fn isatty_stdout() -> bool {
 
 fn isatty_stderr() -> bool {
     unsafe { libc::isatty(libc::STDERR_FILENO) != 0 }
+}
+
+impl From<&cli::ColorWhen> for ColorChoice {
+    fn from(v: &cli::ColorWhen) -> Self {
+        match v {
+            cli::ColorWhen::Always => Self::Always,
+            cli::ColorWhen::Ansi => Self::AlwaysAnsi,
+            cli::ColorWhen::Auto => {
+                if isatty_stdout() {
+                    Self::Auto
+                } else {
+                    Self::Never
+                }
+            }
+            cli::ColorWhen::Never => ColorChoice::Never,
+        }
+    }
 }
