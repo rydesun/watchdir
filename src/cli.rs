@@ -36,6 +36,10 @@ pub struct Opts {
     #[clap(long)]
     pub modify_event: bool,
 
+    /// Canonicalize paths
+    #[clap(long)]
+    canonicalize: bool,
+
     /// When to use colors. WHEN can be 'auto', 'always', 'ansi', or 'never'
     #[clap(value_name = "WHEN", long, default_value = "auto")]
     pub color: ColorWhen,
@@ -104,3 +108,11 @@ pub enum Error {
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+pub fn parse() -> Opts {
+    let mut opts = Opts::parse();
+    if opts.canonicalize {
+        opts.dir = Dir(opts.dir.canonicalize().unwrap().join(""));
+    }
+    opts
+}

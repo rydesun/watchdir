@@ -3,9 +3,8 @@ mod inotify;
 mod path_tree;
 mod watcher;
 
-use std::{io::Write, ops::Deref, path::Path};
+use std::{io::Write, path::Path};
 
-use clap::Clap;
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, warn, Level};
@@ -16,7 +15,7 @@ use watcher::Event;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
-    let opts = cli::Opts::parse();
+    let opts = cli::parse();
 
     let mut stdout = StandardStream::stdout((&opts.color).into());
 
@@ -29,7 +28,7 @@ fn main() {
     info!("version: {}", cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
-        opts.dir.deref(),
+        &opts.dir,
         watcher::WatcherOpts::new(
             opts.include_hidden.into(),
             opts.modify_event,
