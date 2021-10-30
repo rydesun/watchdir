@@ -3,13 +3,14 @@ mod inotify;
 mod path_tree;
 mod watcher;
 
-use std::{io::Write, ops::Deref};
+use std::{io::Write, ops::Deref, path::Path};
 
 use clap::Clap;
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
+use watcher::Event;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -44,6 +45,7 @@ fn main() {
     info!("initialized successfully and listening to upcoming events...\n");
 
     for event in watcher {
+        print_event(&mut stdout, &mut color_spec, &event, &opts.dir).unwrap();
         match event {
             watcher::Event::MoveTop(_) => {
                 warn!(
@@ -52,52 +54,42 @@ fn main() {
                 );
             }
             watcher::Event::DeleteTop(_) => {
-                print_event(&mut stdout, &mut color_spec, event).unwrap();
                 warn!("Watched dir was deleted.");
                 std::process::exit(0);
             }
-            watcher::Event::Ignored => continue,
             _ => {}
         }
-        print_event(&mut stdout, &mut color_spec, event).unwrap();
     }
 }
 
 fn print_event(
     stdout: &mut StandardStream,
     color_spec: &mut ColorSpec,
-    event: watcher::Event,
+    event: &watcher::Event,
+    _path_prefix: &Path,
 ) -> Result<(), std::io::Error> {
-    let (head, content, color) = match event {
-        watcher::Event::Create(path) => {
-            ("Create", format!("{:?}", path), Color::Green)
-        }
-        watcher::Event::Delete(path) => {
-            ("Delete", format!("{:?}", path), Color::Magenta)
-        }
-        watcher::Event::Move(from, to) => {
-            ("Move", format!("{:?} -> {:?}", from, to), Color::Blue)
-        }
-        watcher::Event::MoveAway(path) => {
-            ("MoveAway", format!("{:?}", path), Color::Blue)
-        }
-        watcher::Event::MoveInto(path) => {
-            ("MoveInto", format!("{:?}", path), Color::Blue)
-        }
-        watcher::Event::Modify(path) => {
-            ("Modify", format!("{:?}", path), Color::Yellow)
-        }
-        watcher::Event::MoveTop(path) => {
-            ("MoveTop", format!("{:?}", path), Color::Red)
-        }
-        watcher::Event::DeleteTop(path) => {
-            ("DeleteTop", format!("{:?}", path), Color::Red)
-        }
-        _ => ("Unknown", "".into(), Color::Red),
+    let (head, path, color) = match event {
+        Event::Create(path) => ("Create", Some(path), Color::Green),
+        Event::Delete(path) => ("Delete", Some(path), Color::Magenta),
+        Event::Move(..) => ("Move", None, Color::Blue),
+        Event::MoveAway(path) => ("MoveAway", Some(path), Color::Blue),
+        Event::MoveInto(path) => ("MoveInto", Some(path), Color::Blue),
+        Event::Modify(path) => ("Modify", Some(path), Color::Yellow),
+        Event::MoveTop(path) => ("MoveTop", Some(path), Color::Red),
+        Event::DeleteTop(path) => ("DeleteTop", Some(path), Color::Red),
+        Event::Unknown => ("Unknown", None, Color::Red),
+        Event::Ignored => return Ok(()),
     };
+
     stdout.set_color(color_spec.set_fg(Some(color)))?;
     write!(stdout, "{:<12}", head)?;
-    writeln!(stdout, "{}", content)?;
+
+    if let Some(path) = path {
+        writeln!(stdout, "{:?}", path)?;
+    } else if let Event::Move(from, to) = event {
+        writeln!(stdout, "{:?} -> {:?}", from, to)?;
+    }
+
     Ok(())
 }
 
