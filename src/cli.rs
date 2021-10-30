@@ -15,17 +15,17 @@ pub const VERSION: &str = concat!(
 #[clap(version = VERSION)]
 #[clap(setting = clap::AppSettings::ColoredHelp)]
 pub struct Opts {
-    /// Include hidden files and directories
-    #[clap(short = 'H', long)]
-    pub hidden: bool,
+    /// Include hidden subdirectories
+    #[clap(name = "hidden", short = 'H', long)]
+    pub include_hidden: bool,
 
     /// Directory to watch
     #[clap(name = "DIR", parse(from_os_str), value_hint = ValueHint::DirPath)]
     pub dir: PathBuf,
 
-    /// A level of verbosity, and can be used up to 2 times
-    #[clap(short, long, parse(from_occurrences))]
-    pub verbose: i32,
+    /// Show debug messages
+    #[clap(long)]
+    pub debug: bool,
 
     /// Also includes modification events
     #[clap(long)]

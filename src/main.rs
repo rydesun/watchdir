@@ -38,17 +38,13 @@ fn main() {
     };
     let mut stdout = StandardStream::stdout(color_choice);
 
-    init_logger(opts.verbose, log_color);
+    init_logger(opts.debug, log_color);
     info!("version: {}", cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
         &opts.dir,
         watcher::WatcherOpts::new(
-            if opts.hidden {
-                watcher::Dotdir::Include
-            } else {
-                watcher::Dotdir::Exclude
-            },
+            opts.include_hidden.into(),
             opts.modify_event,
         ),
     ) {
@@ -118,19 +114,16 @@ fn print_event(
     Ok(())
 }
 
-fn init_logger(verbose_level: i32, color: bool) {
+fn init_logger(debug: bool, color: bool) {
     let subscriber = tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_ansi(color);
-    match verbose_level {
-        0 => subscriber.init(),
-        1 => subscriber
+    if debug {
+        subscriber
             .with_env_filter(EnvFilter::new(Level::DEBUG.to_string()))
-            .init(),
-        _ => subscriber
-            .pretty()
-            .with_env_filter(EnvFilter::new(Level::DEBUG.to_string()))
-            .init(),
+            .init();
+    } else {
+        subscriber.init();
     };
 }
 

@@ -33,6 +33,16 @@ pub enum Dotdir {
     Exclude,
 }
 
+impl From<bool> for Dotdir {
+    fn from(v: bool) -> Self {
+        if v {
+            Self::Include
+        } else {
+            Self::Exclude
+        }
+    }
+}
+
 #[derive(Debug, Snafu)]
 #[allow(clippy::enum_variant_names)]
 pub enum Error {
