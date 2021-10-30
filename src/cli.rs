@@ -83,7 +83,7 @@ impl FromStr for Dir {
         } else if fs::File::open(&path).is_err() {
             Err(Error::PermRead)
         } else {
-            Ok(Self(path))
+            Ok(Self(path.join("")))
         }
     }
 }

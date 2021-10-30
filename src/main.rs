@@ -18,7 +18,6 @@ static GLOBAL: MiMalloc = MiMalloc;
 fn main() {
     let opts = cli::Opts::parse();
 
-    let mut color_spec = ColorSpec::new();
     let mut stdout = StandardStream::stdout((&opts.color).into());
 
     init_logger(opts.debug, match opts.color {
@@ -45,7 +44,7 @@ fn main() {
     info!("initialized successfully and listening to upcoming events...\n");
 
     for event in watcher {
-        print_event(&mut stdout, &mut color_spec, &event, &opts.dir).unwrap();
+        print_event(&mut stdout, &event, &opts.dir).unwrap();
         match event {
             watcher::Event::MoveTop(_) => {
                 warn!(
@@ -64,9 +63,8 @@ fn main() {
 
 fn print_event(
     stdout: &mut StandardStream,
-    color_spec: &mut ColorSpec,
     event: &watcher::Event,
-    _path_prefix: &Path,
+    path_prefix: &Path,
 ) -> Result<(), std::io::Error> {
     let (head, path, color) = match event {
         Event::Create(path) => ("Create", Some(path), Color::Green),
@@ -81,15 +79,64 @@ fn print_event(
         Event::Ignored => return Ok(()),
     };
 
-    stdout.set_color(color_spec.set_fg(Some(color)))?;
+    stdout.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
     write!(stdout, "{:<12}", head)?;
 
-    if let Some(path) = path {
-        writeln!(stdout, "{:?}", path)?;
-    } else if let Event::Move(from, to) = event {
-        writeln!(stdout, "{:?} -> {:?}", from, to)?;
+    match event {
+        Event::Move(from, to) => {
+            let from_rest = from.strip_prefix(path_prefix).unwrap();
+            let _from_rest_parent =
+                from_rest.parent().unwrap_or_else(|| Path::new("")).join("");
+            let _from_rest_name = from_rest.file_name().unwrap();
+            let to_rest = to.strip_prefix(path_prefix).unwrap();
+            let _to_rest_parent =
+                to_rest.parent().unwrap_or_else(|| Path::new("")).join("");
+            let _to_rest_name = to_rest.file_name().unwrap();
+
+            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+            write!(stdout, "{}", path_prefix.to_string_lossy())?;
+
+            stdout.set_color(
+                ColorSpec::new().set_fg(Some(color)).set_bold(true),
+            )?;
+            write!(stdout, "{}", from_rest.to_string_lossy())?;
+
+            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+            write!(stdout, " -> ")?;
+
+            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+            write!(stdout, "{}", path_prefix.to_string_lossy())?;
+
+            stdout.set_color(
+                ColorSpec::new().set_fg(Some(color)).set_bold(true),
+            )?;
+            write!(stdout, "{}", to_rest.to_string_lossy())?;
+        }
+        Event::MoveTop(path) | Event::DeleteTop(path) => {
+            stdout.set_color(
+                ColorSpec::new().set_fg(Some(color)).set_bold(true),
+            )?;
+            write!(stdout, "{}", path.to_string_lossy())?;
+        }
+        _ => {
+            let path = path.unwrap();
+            let path_rest = path.strip_prefix(path_prefix).unwrap();
+            let _path_rest_parent =
+                path_rest.parent().unwrap_or_else(|| Path::new("")).join("");
+            let _path_rest_name = path_rest.file_name().unwrap();
+
+            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+            write!(stdout, "{}", path_prefix.to_string_lossy())?;
+
+            stdout.set_color(
+                ColorSpec::new().set_fg(Some(color)).set_bold(true),
+            )?;
+            write!(stdout, "{}", path_rest.to_string_lossy())?;
+        }
     }
 
+    stdout.set_color(&ColorSpec::new())?;
+    writeln!(stdout)?;
     Ok(())
 }
 
