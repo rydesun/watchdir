@@ -7,18 +7,17 @@ use std::{
 
 use clap::{ArgEnum, Clap, IntoApp, ValueHint};
 use clap_generate::{generate, generators, Generator};
+use lazy_static::lazy_static;
 use snafu::{ResultExt, Snafu};
 
-pub const VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    " ",
-    env!("BUILD_DATE"),
-    " ",
-    env!("GIT_SHA")
-);
+lazy_static! {
+    pub static ref VERSION: String =
+        [env!("CARGO_PKG_VERSION"), env!("BUILD_DATE"), &env!("GIT_SHA")[..5]]
+            .join(" ");
+}
 
 #[derive(Clap)]
-#[clap(version = VERSION)]
+#[clap(version = VERSION.as_str())]
 #[clap(setting = clap::AppSettings::ColoredHelp)]
 #[clap(term_width = 79)]
 pub struct Opts {

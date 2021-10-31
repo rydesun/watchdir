@@ -29,7 +29,7 @@ fn main() {
         cli::ColorWhen::Auto => isatty_stderr(),
         cli::ColorWhen::Never => false,
     });
-    info!("version: {}", cli::VERSION);
+    info!("version: {}", *cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
         opts.dir.as_ref().unwrap(),
