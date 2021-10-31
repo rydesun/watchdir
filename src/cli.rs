@@ -20,6 +20,7 @@ pub const VERSION: &str = concat!(
 #[derive(Clap)]
 #[clap(version = VERSION)]
 #[clap(setting = clap::AppSettings::ColoredHelp)]
+#[clap(term_width = 79)]
 pub struct Opts {
     /// Include hidden subdirectories
     #[clap(name = "hidden", short = 'H', long)]
