@@ -12,8 +12,9 @@ edition = "2018"
 publish = false
 
 [dependencies]
-clap = "3.0.0-beta.4"
-clap_generate = "3.0.0-beta.4"
+clap = "=3.0.0-beta.4"
+clap_generate = "=3.0.0-beta.4"
+clap_derive = "=3.0.0-beta.4"
 libc = "0.2"
 walkdir = "2"
 snafu = "0.6"
