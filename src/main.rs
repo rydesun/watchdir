@@ -31,6 +31,7 @@ fn main() {
     });
     info!("version: {}", *cli::VERSION);
 
+    info!("Initializing...");
     let watcher = match watcher::Watcher::new(
         opts.dir.as_ref().unwrap(),
         watcher::WatcherOpts::new(
@@ -44,7 +45,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    info!("initialized successfully and listening to upcoming events...\n");
+    info!("Initialized successfully!");
 
     for event in watcher {
         print_event(&mut stdout, &event, opts.dir.as_ref().unwrap()).unwrap();
@@ -150,6 +151,7 @@ fn init_logger(debug: bool, color: bool) {
     if debug {
         subscriber
             .with_env_filter(EnvFilter::new(Level::DEBUG.to_string()))
+            .pretty()
             .init();
     } else {
         subscriber.init();
