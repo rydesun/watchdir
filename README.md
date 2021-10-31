@@ -15,7 +15,7 @@ Use `--hidden` option to supress this behavior.
 ## Usage
 
 ```bash
-watchdir DIR
+watchdir [FLAGS] [OPTIONS] <DIR>
 ```
 
 ## Installation

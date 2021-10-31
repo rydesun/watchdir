@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use clap::{Clap, ValueHint};
+use clap::{ArgEnum, Clap, ValueHint};
 use snafu::{ResultExt, Snafu};
 
 pub const VERSION: &str = concat!(
@@ -24,7 +24,7 @@ pub struct Opts {
     #[clap(name = "hidden", short = 'H', long)]
     pub include_hidden: bool,
 
-    /// Directory to watch
+    /// The directory to be watched
     #[clap(name = "DIR", value_hint = ValueHint::DirPath)]
     pub dir: Dir,
 
@@ -32,7 +32,7 @@ pub struct Opts {
     #[clap(long)]
     pub debug: bool,
 
-    /// Also includes modification events
+    /// Include modification events
     #[clap(long)]
     pub modify_event: bool,
 
@@ -40,30 +40,17 @@ pub struct Opts {
     #[clap(long)]
     canonicalize: bool,
 
-    /// When to use colors. WHEN can be 'auto', 'always', 'ansi', or 'never'
-    #[clap(value_name = "WHEN", long, default_value = "auto")]
+    /// When to use colors
+    #[clap(value_name = "WHEN", long, arg_enum, default_value = "auto")]
     pub color: ColorWhen,
 }
 
+#[derive(ArgEnum)]
 pub enum ColorWhen {
     Auto,
     Always,
     Ansi,
     Never,
-}
-
-impl FromStr for ColorWhen {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "auto" => Ok(Self::Auto),
-            "always" => Ok(Self::Always),
-            "ansi" => Ok(Self::Ansi),
-            "never" => Ok(Self::Never),
-            _ => Err(Error::OptionColor),
-        }
-    }
 }
 
 pub struct Dir(PathBuf);
