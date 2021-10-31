@@ -16,6 +16,10 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     let opts = cli::parse();
+    if let Some(shell) = opts.completion {
+        cli::print_completions(shell);
+        std::process::exit(0);
+    }
 
     let mut stdout = StandardStream::stdout((&opts.color).into());
 
@@ -28,7 +32,7 @@ fn main() {
     info!("version: {}", cli::VERSION);
 
     let watcher = match watcher::Watcher::new(
-        &opts.dir,
+        opts.dir.as_ref().unwrap(),
         watcher::WatcherOpts::new(
             opts.include_hidden.into(),
             opts.modify_event,
@@ -43,7 +47,7 @@ fn main() {
     info!("initialized successfully and listening to upcoming events...\n");
 
     for event in watcher {
-        print_event(&mut stdout, &event, &opts.dir).unwrap();
+        print_event(&mut stdout, &event, opts.dir.as_ref().unwrap()).unwrap();
         match event {
             watcher::Event::MoveTop(_) => {
                 warn!(

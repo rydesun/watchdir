@@ -5,7 +5,8 @@ use std::{
     str::FromStr,
 };
 
-use clap::{ArgEnum, Clap, ValueHint};
+use clap::{ArgEnum, Clap, IntoApp, ValueHint};
+use clap_generate::{generate, generators, Generator};
 use snafu::{ResultExt, Snafu};
 
 pub const VERSION: &str = concat!(
@@ -25,8 +26,9 @@ pub struct Opts {
     pub include_hidden: bool,
 
     /// The directory to be watched
-    #[clap(name = "DIR", value_hint = ValueHint::DirPath)]
-    pub dir: Dir,
+    #[clap(name = "DIR", value_hint = ValueHint::DirPath,
+        required_unless_present_any = ["completion"])]
+    pub dir: Option<Dir>,
 
     /// Show debug messages
     #[clap(long)]
@@ -43,6 +45,10 @@ pub struct Opts {
     /// When to use colors
     #[clap(value_name = "WHEN", long, arg_enum, default_value = "auto")]
     pub color: ColorWhen,
+
+    /// Generate completions for shell
+    #[clap(value_name = "SHELL", long, arg_enum)]
+    pub completion: Option<Shell>,
 }
 
 #[derive(ArgEnum)]
@@ -79,6 +85,13 @@ impl FromStr for Dir {
     }
 }
 
+#[derive(ArgEnum, Clap, PartialEq)]
+pub enum Shell {
+    Bash,
+    Fish,
+    Zsh,
+}
+
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("{}", source))]
@@ -99,7 +112,22 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub fn parse() -> Opts {
     let mut opts = Opts::parse();
     if opts.canonicalize {
-        opts.dir = Dir(opts.dir.canonicalize().unwrap().join(""));
+        opts.dir =
+            Some(Dir(opts.dir.unwrap().canonicalize().unwrap().join("")));
     }
     opts
+}
+
+pub fn print_completions(shell: Shell) {
+    fn print<G: Generator>() {
+        let mut buf = std::io::stdout();
+        let mut app = Opts::into_app();
+        let name = app.get_name().to_string();
+        generate::<G, _>(&mut app, name, &mut buf);
+    }
+    match shell {
+        Shell::Bash => print::<generators::Bash>(),
+        Shell::Fish => print::<generators::Fish>(),
+        Shell::Zsh => print::<generators::Zsh>(),
+    }
 }
