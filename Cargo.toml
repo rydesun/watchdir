@@ -31,3 +31,6 @@ rand = "0.8"
 
 [build-dependencies]
 chrono = "0.4"
+
+[profile.release]
+lto = true
