@@ -48,7 +48,13 @@ fn main() {
     info!("Initialized successfully!");
 
     for event in watcher {
-        print_event(&mut stdout, &event, opts.dir.as_ref().unwrap()).unwrap();
+        print_event(
+            &mut stdout,
+            &event,
+            opts.dir.as_ref().unwrap(),
+            opts.prefix,
+        )
+        .unwrap();
         match event {
             watcher::Event::MoveTop(_) => {
                 warn!(
@@ -69,6 +75,7 @@ fn print_event(
     stdout: &mut StandardStream,
     event: &watcher::Event,
     path_prefix: &Path,
+    need_prefix: bool,
 ) -> Result<(), std::io::Error> {
     let (head, path, color) = match event {
         Event::Create(path) => ("Create", Some(path), Color::Green),
@@ -97,8 +104,10 @@ fn print_event(
                 to_rest.parent().unwrap_or_else(|| Path::new("")).join("");
             let _to_rest_name = to_rest.file_name().unwrap();
 
-            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
-            write!(stdout, "{}", path_prefix.to_string_lossy())?;
+            if need_prefix {
+                stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+                write!(stdout, "{}", path_prefix.to_string_lossy())?;
+            }
 
             stdout.set_color(
                 ColorSpec::new().set_fg(Some(color)).set_bold(true),
@@ -108,8 +117,10 @@ fn print_event(
             stdout.set_color(ColorSpec::new().set_dimmed(true))?;
             write!(stdout, " -> ")?;
 
-            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
-            write!(stdout, "{}", path_prefix.to_string_lossy())?;
+            if need_prefix {
+                stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+                write!(stdout, "{}", path_prefix.to_string_lossy())?;
+            }
 
             stdout.set_color(
                 ColorSpec::new().set_fg(Some(color)).set_bold(true),
@@ -129,8 +140,10 @@ fn print_event(
                 path_rest.parent().unwrap_or_else(|| Path::new("")).join("");
             let _path_rest_name = path_rest.file_name().unwrap();
 
-            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
-            write!(stdout, "{}", path_prefix.to_string_lossy())?;
+            if need_prefix {
+                stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+                write!(stdout, "{}", path_prefix.to_string_lossy())?;
+            }
 
             stdout.set_color(
                 ColorSpec::new().set_fg(Some(color)).set_bold(true),

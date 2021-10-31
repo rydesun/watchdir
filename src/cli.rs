@@ -42,6 +42,10 @@ pub struct Opts {
     #[clap(long)]
     canonicalize: bool,
 
+    /// Strip watched directory path
+    #[clap(long = "no-prefix", parse(from_flag = std::ops::Not::not))]
+    pub prefix: bool,
+
     /// When to use colors
     #[clap(value_name = "WHEN", long, arg_enum, default_value = "auto")]
     pub color: ColorWhen,
