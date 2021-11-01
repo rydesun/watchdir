@@ -9,23 +9,17 @@ use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
-use watcher::Event;
+
+use crate::watcher::Event;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     let opts = cli::parse();
-    if let Some(shell) = opts.completion {
-        cli::print_completions(shell);
-        std::process::exit(0);
-    }
-
-    let mut stdout = StandardStream::stdout((&opts.color).into());
 
     init_logger(opts.debug, match opts.color {
         cli::ColorWhen::Always => true,
-        cli::ColorWhen::Ansi => true,
         cli::ColorWhen::Auto => isatty_stderr(),
         cli::ColorWhen::Never => false,
     });
@@ -47,6 +41,7 @@ fn main() {
     };
     info!("Initialized successfully!");
 
+    let mut stdout = StandardStream::stdout((&opts.color).into());
     for event in watcher {
         print_event(
             &mut stdout,
@@ -182,8 +177,7 @@ fn isatty_stderr() -> bool {
 impl From<&cli::ColorWhen> for ColorChoice {
     fn from(v: &cli::ColorWhen) -> Self {
         match v {
-            cli::ColorWhen::Always => Self::Always,
-            cli::ColorWhen::Ansi => Self::AlwaysAnsi,
+            cli::ColorWhen::Always => Self::AlwaysAnsi,
             cli::ColorWhen::Auto => {
                 if isatty_stdout() {
                     Self::Auto

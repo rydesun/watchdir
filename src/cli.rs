@@ -59,7 +59,6 @@ pub struct Opts {
 pub enum ColorWhen {
     Auto,
     Always,
-    Ansi,
     Never,
 }
 
@@ -115,6 +114,12 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn parse() -> Opts {
     let mut opts = Opts::parse();
+
+    if let Some(shell) = opts.completion {
+        print_completions(shell);
+        std::process::exit(0);
+    }
+
     if opts.canonicalize {
         opts.dir =
             Some(Dir(opts.dir.unwrap().canonicalize().unwrap().join("")));
