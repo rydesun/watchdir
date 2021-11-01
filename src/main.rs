@@ -85,7 +85,7 @@ fn print_event(
         Event::Ignored => return Ok(()),
     };
 
-    stdout.set_color(ColorSpec::new().set_fg(Some(color)).set_bold(true))?;
+    write_color!(stdout, (color)[set_bold])?;
     write!(stdout, "{:<12}", head)?;
 
     match event {
@@ -100,32 +100,26 @@ fn print_event(
             let _to_rest_name = to_rest.file_name().unwrap();
 
             if need_prefix {
-                stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+                write_color!(stdout, [set_dimmed])?;
                 write!(stdout, "{}", path_prefix.to_string_lossy())?;
             }
 
-            stdout.set_color(
-                ColorSpec::new().set_fg(Some(color)).set_bold(true),
-            )?;
+            write_color!(stdout, (color)[set_bold])?;
             write!(stdout, "{}", from_rest.to_string_lossy())?;
 
-            stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+            write_color!(stdout, [set_dimmed])?;
             write!(stdout, " -> ")?;
 
             if need_prefix {
-                stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+                write_color!(stdout, [set_dimmed])?;
                 write!(stdout, "{}", path_prefix.to_string_lossy())?;
             }
 
-            stdout.set_color(
-                ColorSpec::new().set_fg(Some(color)).set_bold(true),
-            )?;
+            write_color!(stdout, (color)[set_bold])?;
             write!(stdout, "{}", to_rest.to_string_lossy())?;
         }
         Event::MoveTop(path) | Event::DeleteTop(path) => {
-            stdout.set_color(
-                ColorSpec::new().set_fg(Some(color)).set_bold(true),
-            )?;
+            write_color!(stdout, (color)[set_bold])?;
             write!(stdout, "{}", path.to_string_lossy())?;
         }
         _ => {
@@ -136,18 +130,16 @@ fn print_event(
             let _path_rest_name = path_rest.file_name().unwrap();
 
             if need_prefix {
-                stdout.set_color(ColorSpec::new().set_dimmed(true))?;
+                write_color!(stdout, [set_dimmed])?;
                 write!(stdout, "{}", path_prefix.to_string_lossy())?;
             }
 
-            stdout.set_color(
-                ColorSpec::new().set_fg(Some(color)).set_bold(true),
-            )?;
+            write_color!(stdout, (color)[set_bold])?;
             write!(stdout, "{}", path_rest.to_string_lossy())?;
         }
     }
 
-    stdout.set_color(&ColorSpec::new())?;
+    write_color!(stdout, reset);
     writeln!(stdout)?;
     Ok(())
 }
@@ -188,4 +180,28 @@ impl From<&cli::ColorWhen> for ColorChoice {
             cli::ColorWhen::Never => ColorChoice::Never,
         }
     }
+}
+
+#[macro_export]
+macro_rules! write_color {
+    ( $writer:expr, reset ) => {
+        $writer.set_color(&ColorSpec::new())?;
+    };
+
+    (
+        $writer:expr,
+        $( (
+            $( $fg:expr )? $( ,$bg:expr )?
+        ) )?
+        [
+            $( $effect:ident ),*
+        ]
+    ) => {
+        $writer.set_color(ColorSpec::new()
+            $(
+                $(.set_fg(Some($fg)))?
+                $(.set_bg(Some($bg)))?
+            )?
+            $(.$effect(true))*)
+    };
 }
