@@ -30,7 +30,7 @@ tempfile = "3"
 rand = "0.8"
 
 [build-dependencies]
-chrono = "0.4"
+time = "0.3"
 
 [profile.release]
 lto = true

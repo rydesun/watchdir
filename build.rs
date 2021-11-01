@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 use std::{env, fs};
 
-use chrono::prelude::*;
-
 fn main() {
     if let Some(git_sha) = get_git_sha() {
         println!("cargo:rustc-env=GIT_SHA={}", git_sha);
@@ -10,8 +8,8 @@ fn main() {
 
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
     let time = match env::var("SOURCE_DATE_EPOCH") {
-        Ok(t) => t.parse::<i64>().unwrap(),
-        _ => Utc::now().timestamp(),
+        Ok(t) => t.parse().unwrap(),
+        _ => time::OffsetDateTime::now_utc().unix_timestamp(),
     };
     println!("cargo:rustc-env=BUILD_DATE={}", time);
 }
