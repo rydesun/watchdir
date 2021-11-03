@@ -18,13 +18,16 @@ use crate::{
 #[derive(PartialEq, Debug)]
 pub enum Event {
     Create(PathBuf),
-    Move(PathBuf, PathBuf),
-    MoveAway(PathBuf),
+    MoveDir(PathBuf, PathBuf),
+    MoveFile(PathBuf, PathBuf),
+    MoveAwayDir(PathBuf),
+    MoveAwayFile(PathBuf),
     MoveInto(PathBuf),
     MoveTop(PathBuf),
-    Delete(PathBuf),
-    Modify(PathBuf),
+    DeleteDir(PathBuf),
+    DeleteFile(PathBuf),
     DeleteTop(PathBuf),
+    Modify(PathBuf),
     Ignored,
     Unknown,
 }
@@ -60,16 +63,12 @@ pub enum Error {
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
-type Cookie = u32;
-
 pub struct Watcher {
     opts: WatcherOpts,
     fd: i32,
-    top_dir: PathBuf,
     top_wd: i32,
     path_tree: path_tree::Head<i32>,
     event_seq: EventSeq,
-    prev: Option<(EventKind, Cookie, PathBuf)>,
     cached_inotify_event: Option<inotify::Event>,
     cached_events: Option<Box<dyn Iterator<Item = Event>>>,
 }
@@ -106,11 +105,9 @@ impl Watcher {
         let mut watcher = Self {
             fd,
             opts,
-            top_dir: dir.to_owned(),
             top_wd: 0,
             path_tree: path_tree::Head::new(dir.to_owned()),
             event_seq,
-            prev: None,
             cached_inotify_event: None,
             cached_events: None,
         };
@@ -183,12 +180,139 @@ impl Watcher {
         self.path_tree.rename(wd, path).unwrap()
     }
 
-    fn unwatch_all(&mut self, wd: i32) {
+    fn rm_watch_all(&mut self, wd: i32) {
         let values = self.path_tree.delete(wd).unwrap();
         for wd in values {
             unsafe {
                 libc::inotify_rm_watch(self.fd, wd);
             }
+        }
+    }
+
+    fn next_inotify_event(&mut self) -> Option<inotify::Event> {
+        if self.event_seq.has_next_event() {
+            Some(self.event_seq.next().unwrap())
+        } else {
+            None
+        }
+    }
+
+    fn recognize(
+        &mut self,
+        inotify_event: inotify::Event,
+    ) -> (Event, Option<i32>) {
+        let wd = inotify_event.wd;
+
+        match inotify_event.kind {
+            EventKind::Create(path) => {
+                let full_path = self.full_path(wd, &path);
+                (Event::Create(full_path), None)
+            }
+
+            EventKind::MoveFrom(from_path) => {
+                let full_from_path = self.full_path(wd, &from_path);
+                if let Some(next_inotify_event) = self.next_inotify_event() {
+                    match next_inotify_event.kind {
+                        EventKind::MoveSelf => {
+                            if next_inotify_event.wd == self.top_wd {
+                                (Event::MoveTop(full_from_path), None)
+                            } else {
+                                (
+                                    Event::MoveAwayDir(full_from_path),
+                                    Some(next_inotify_event.wd),
+                                )
+                            }
+                        }
+                        EventKind::MoveTo(ref to_path) => {
+                            if inotify_event.cookie
+                                != next_inotify_event.cookie
+                            {
+                                self.cached_inotify_event =
+                                    Some(next_inotify_event);
+                                (Event::MoveAwayFile(full_from_path), None)
+                            } else {
+                                let full_to_path = self
+                                    .full_path(next_inotify_event.wd, to_path);
+                                if let Some(next2_inotify_event) =
+                                    self.next_inotify_event()
+                                {
+                                    match next2_inotify_event.kind {
+                                        EventKind::MoveSelf => (
+                                            Event::MoveDir(
+                                                full_from_path,
+                                                full_to_path,
+                                            ),
+                                            Some(next2_inotify_event.wd),
+                                        ),
+                                        _ => {
+                                            self.cached_inotify_event =
+                                                Some(next2_inotify_event);
+                                            (
+                                                Event::MoveFile(
+                                                    full_from_path,
+                                                    full_to_path,
+                                                ),
+                                                None,
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    (
+                                        Event::MoveFile(
+                                            full_from_path,
+                                            full_to_path,
+                                        ),
+                                        None,
+                                    )
+                                }
+                            }
+                        }
+                        _ => {
+                            self.cached_inotify_event =
+                                Some(next_inotify_event);
+                            (Event::MoveAwayFile(full_from_path), None)
+                        }
+                    }
+                } else {
+                    (Event::MoveAwayFile(full_from_path), None)
+                }
+            }
+
+            EventKind::MoveTo(path) => {
+                let full_path = self.full_path(wd, &path);
+                (Event::MoveInto(full_path), None)
+            }
+
+            EventKind::Delete(path) => {
+                let full_path = self.full_path(wd, &path);
+                if let Some(next_inotify_event) = self.next_inotify_event() {
+                    if next_inotify_event.wd == self.top_wd {
+                        (Event::DeleteTop(full_path), None)
+                    } else {
+                        match next_inotify_event.kind {
+                            EventKind::DeleteSelf => (
+                                Event::DeleteDir(full_path),
+                                Some(next_inotify_event.wd),
+                            ),
+                            _ => {
+                                self.cached_inotify_event =
+                                    Some(next_inotify_event);
+                                (Event::DeleteFile(full_path), None)
+                            }
+                        }
+                    }
+                } else {
+                    (Event::DeleteFile(full_path), None)
+                }
+            }
+
+            EventKind::Modify(path) => {
+                let full_path = self.full_path(wd, &path);
+                (Event::Modify(full_path), None)
+            }
+
+            EventKind::Ignored => (Event::Ignored, None),
+            _ => (Event::Unknown, None),
         }
     }
 }
@@ -207,102 +331,38 @@ impl Iterator for Watcher {
             .take()
             .unwrap_or_else(|| self.event_seq.next().unwrap());
 
-        if let Some((kind, cookie, path)) = self.prev.take() {
-            if matches!(inotify_event.kind, EventKind::MoveTo) {
-                if inotify_event.cookie != cookie {
-                    self.cached_inotify_event = Some(inotify_event);
-                    return Some(Event::MoveAway(path));
-                }
-                let full_path = self
-                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
-                self.prev = Some((
-                    EventKind::MoveTo,
-                    inotify_event.cookie,
-                    full_path.to_owned(),
-                ));
-                return Some(Event::Move(path.to_owned(), full_path));
-            } else if matches!(inotify_event.kind, EventKind::MoveSelf) {
-                if matches!(kind, EventKind::MoveFrom) {
-                    self.unwatch_all(inotify_event.wd);
-                    return Some(Event::MoveAway(path));
-                } else if inotify_event.wd != self.top_wd {
-                    self.update_path(inotify_event.wd, &path);
-                    return self.next();
-                }
-            } else if matches!(kind, EventKind::MoveFrom) {
-                self.cached_inotify_event = Some(inotify_event);
-                return Some(Event::MoveAway(path));
-            }
-        }
+        let (event, wd) = self.recognize(inotify_event);
 
-        match inotify_event.kind {
-            EventKind::Create => {
-                let full_path = self
-                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
-                if let Ok(metadata) = fs::symlink_metadata(&full_path) {
-                    if guard(self.opts, &full_path, metadata) {
+        match event {
+            Event::MoveDir(_, ref path) => {
+                self.update_path(wd.unwrap(), path);
+            }
+            Event::MoveAwayDir(_) | Event::DeleteDir(_) => {
+                self.rm_watch_all(wd.unwrap());
+            }
+            Event::MoveInto(ref path) => {
+                if let Ok(metadata) = fs::symlink_metadata(path) {
+                    if guard(self.opts, path, metadata) {
+                        self.add_watch_all(path);
+                    }
+                }
+            }
+            Event::Create(ref path) => {
+                if let Ok(metadata) = fs::symlink_metadata(path) {
+                    if guard(self.opts, path, metadata) {
                         self.cached_events = Some(Box::new(
-                            self.add_watch_all(&full_path)
+                            self.add_watch_all(path)
                                 .1
                                 .into_iter()
                                 .map(Event::Create),
                         ));
                     }
                 }
-                Some(Event::Create(full_path))
             }
-            EventKind::MoveFrom => {
-                let full_path = self
-                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
-                if self.event_seq.has_next_event() {
-                    self.prev = Some((
-                        EventKind::MoveFrom,
-                        inotify_event.cookie,
-                        full_path,
-                    ));
-                    self.next()
-                } else {
-                    Some(Event::MoveAway(full_path))
-                }
-            }
-            EventKind::MoveTo => {
-                let full_path = self
-                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
-                if let Ok(metadata) = fs::symlink_metadata(&full_path) {
-                    if guard(self.opts, &full_path, metadata) {
-                        self.add_watch_all(&full_path);
-                    }
-                }
-                Some(Event::MoveInto(full_path))
-            }
-            EventKind::Delete => {
-                let full_path = self
-                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
-                Some(Event::Delete(full_path))
-            }
-            EventKind::DeleteSelf => {
-                self.unwatch_all(inotify_event.wd);
-                if inotify_event.wd == self.top_wd {
-                    Some(Event::DeleteTop(self.top_dir.to_owned()))
-                } else {
-                    self.next()
-                }
-            }
-            EventKind::MoveSelf => {
-                if inotify_event.wd == self.top_wd {
-                    Some(Event::MoveTop(self.top_dir.to_owned()))
-                } else {
-                    Some(Event::Unknown)
-                }
-            }
-            EventKind::Modify => {
-                let full_path = self
-                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
-                Some(Event::Modify(full_path))
-            }
-            EventKind::Ignored => Some(Event::Ignored),
-            _ => Some(Event::Unknown),
+            _ => {}
         }
+
+        Some(event)
     }
 }
 
@@ -415,7 +475,7 @@ mod tests {
         let new_dir = top_dir.path().join(random_string(5));
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
 
-        assert_eq!(watcher.next().unwrap(), Event::Move(old_dir, new_dir))
+        assert_eq!(watcher.next().unwrap(), Event::MoveDir(old_dir, new_dir))
     }
 
     #[test]
@@ -441,7 +501,7 @@ mod tests {
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
         assert_eq!(
             watcher.next().unwrap(),
-            Event::Move(old_dir, new_dir.to_owned())
+            Event::MoveDir(old_dir, new_dir.to_owned())
         );
 
         let new_file = new_dir.join(sub_dirs).join(random_string(5));
@@ -472,7 +532,7 @@ mod tests {
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
         assert_eq!(
             watcher.next().unwrap(),
-            Event::Move(old_dir, new_dir.to_owned())
+            Event::MoveDir(old_dir, new_dir.to_owned())
         );
 
         let new_file = new_dir.join(random_string(5));
@@ -495,7 +555,10 @@ mod tests {
         let new_file = top_dir.path().join(random_string(5));
         rename(old_file.to_owned(), new_file.to_owned()).unwrap();
 
-        assert_eq!(watcher.next().unwrap(), Event::Move(old_file, new_file))
+        assert_eq!(
+            watcher.next().unwrap(),
+            Event::MoveFile(old_file, new_file)
+        )
     }
 
     #[test]
@@ -514,7 +577,7 @@ mod tests {
         let new_dir = unwatched_dir.path().join(random_string(5));
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
 
-        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_dir));
+        assert_eq!(watcher.next().unwrap(), Event::MoveAwayDir(old_dir));
 
         let unwatched_file = new_dir.join(random_string(5));
         File::create(&unwatched_file).unwrap();
@@ -537,7 +600,7 @@ mod tests {
         let new_file = unwatched_dir.path().join(random_string(5));
         rename(old_file.to_owned(), new_file).unwrap();
 
-        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
+        assert_eq!(watcher.next().unwrap(), Event::MoveAwayFile(old_file));
     }
 
     #[test]
@@ -609,7 +672,7 @@ mod tests {
         let next_new_file = top_dir.path().join(next_file_name);
         rename(next_old_file, next_new_file.to_owned()).unwrap();
 
-        assert_eq!(watcher.next().unwrap(), Event::MoveAway(old_file));
+        assert_eq!(watcher.next().unwrap(), Event::MoveAwayFile(old_file));
         assert_eq!(watcher.next().unwrap(), Event::MoveInto(next_new_file))
     }
 
@@ -627,7 +690,7 @@ mod tests {
         .unwrap();
 
         fs::remove_file(&path).unwrap();
-        assert_eq!(watcher.next().unwrap(), Event::Delete(path))
+        assert_eq!(watcher.next().unwrap(), Event::DeleteFile(path))
     }
 
     #[test]
@@ -644,7 +707,7 @@ mod tests {
         .unwrap();
 
         fs::remove_dir(&dir).unwrap();
-        assert_eq!(watcher.next().unwrap(), Event::Delete(dir))
+        assert_eq!(watcher.next().unwrap(), Event::DeleteDir(dir))
     }
 
     #[test]
@@ -667,14 +730,14 @@ mod tests {
         .unwrap();
 
         fs::remove_dir_all(&dir).unwrap();
-        assert_eq!(watcher.next().unwrap(), Event::Delete(file));
+        assert_eq!(watcher.next().unwrap(), Event::DeleteFile(file));
 
         for _ in 0..3 {
             assert_eq!(
                 watcher.next().unwrap(),
-                Event::Delete(sub_dir.to_owned())
+                Event::DeleteDir(sub_dir.to_owned())
             );
-            assert_eq!(watcher.next().unwrap(), Event::Ignored,);
+            assert_eq!(watcher.next().unwrap(), Event::Ignored);
             sub_dir.pop();
         }
     }

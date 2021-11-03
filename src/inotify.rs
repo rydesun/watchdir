@@ -39,17 +39,6 @@ impl EventSeq {
         let raw_event: libc::inotify_event =
             unsafe { std::ptr::read(raw.as_ptr() as *const _) };
 
-        let kind = match raw_event.mask {
-            i if i & libc::IN_MOVED_FROM > 0 => EventKind::MoveFrom,
-            i if i & libc::IN_MOVED_TO > 0 => EventKind::MoveTo,
-            i if i & libc::IN_CREATE > 0 => EventKind::Create,
-            i if i & libc::IN_MOVE_SELF > 0 => EventKind::MoveSelf,
-            i if i & libc::IN_DELETE > 0 => EventKind::Delete,
-            i if i & libc::IN_DELETE_SELF > 0 => EventKind::DeleteSelf,
-            i if i & libc::IN_MODIFY > 0 => EventKind::Modify,
-            i if i & libc::IN_IGNORED > 0 => EventKind::Ignored,
-            _ => EventKind::Unknown,
-        };
         let path = if raw_event.len > 0 {
             let raw_path = unsafe {
                 CStr::from_bytes_with_nul_unchecked(
@@ -66,12 +55,25 @@ impl EventSeq {
             None
         };
 
+        let kind = match raw_event.mask {
+            i if i & libc::IN_MOVED_FROM > 0 => {
+                EventKind::MoveFrom(path.unwrap())
+            }
+            i if i & libc::IN_MOVED_TO > 0 => EventKind::MoveTo(path.unwrap()),
+            i if i & libc::IN_CREATE > 0 => EventKind::Create(path.unwrap()),
+            i if i & libc::IN_MOVE_SELF > 0 => EventKind::MoveSelf,
+            i if i & libc::IN_DELETE > 0 => EventKind::Delete(path.unwrap()),
+            i if i & libc::IN_DELETE_SELF > 0 => EventKind::DeleteSelf,
+            i if i & libc::IN_MODIFY > 0 => EventKind::Modify(path.unwrap()),
+            i if i & libc::IN_IGNORED > 0 => EventKind::Ignored,
+            _ => EventKind::Unknown,
+        };
+
         let event = Event {
             wd: raw_event.wd,
             cookie: raw_event.cookie,
             len: raw_event.len,
             kind,
-            path,
         };
         debug!(?event);
 
@@ -112,22 +114,21 @@ impl Iterator for EventSeq {
 
 #[derive(Debug)]
 pub struct Event {
+    pub kind: EventKind,
     pub wd: i32,
     pub cookie: u32,
     len: u32,
-    pub path: Option<PathBuf>,
-    pub kind: EventKind,
 }
 
 #[derive(Debug)]
 pub enum EventKind {
-    MoveTo,
-    MoveFrom,
+    MoveTo(PathBuf),
+    MoveFrom(PathBuf),
     MoveSelf,
-    Create,
-    Delete,
+    Create(PathBuf),
+    Delete(PathBuf),
     DeleteSelf,
-    Modify,
+    Modify(PathBuf),
     Ignored,
     Unknown,
 }

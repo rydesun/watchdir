@@ -74,9 +74,12 @@ fn print_event(
 ) -> Result<(), std::io::Error> {
     let (head, path, color) = match event {
         Event::Create(path) => ("Create", Some(path), Color::Green),
-        Event::Delete(path) => ("Delete", Some(path), Color::Magenta),
-        Event::Move(..) => ("Move", None, Color::Blue),
-        Event::MoveAway(path) => ("MoveAway", Some(path), Color::Blue),
+        Event::DeleteDir(path) => ("Delete", Some(path), Color::Magenta),
+        Event::DeleteFile(path) => ("Delete", Some(path), Color::Magenta),
+        Event::MoveDir(..) => ("Move", None, Color::Blue),
+        Event::MoveFile(..) => ("Move", None, Color::Blue),
+        Event::MoveAwayDir(path) => ("MoveAway", Some(path), Color::Blue),
+        Event::MoveAwayFile(path) => ("MoveAway", Some(path), Color::Blue),
         Event::MoveInto(path) => ("MoveInto", Some(path), Color::Blue),
         Event::Modify(path) => ("Modify", Some(path), Color::Yellow),
         Event::MoveTop(path) => ("MoveTop", Some(path), Color::Red),
@@ -89,7 +92,7 @@ fn print_event(
     write!(stdout, "{:<12}", head)?;
 
     match event {
-        Event::Move(from, to) => {
+        Event::MoveFile(from, to) | Event::MoveDir(from, to) => {
             let from_rest = from.strip_prefix(path_prefix).unwrap();
             let _from_rest_parent =
                 from_rest.parent().unwrap_or_else(|| Path::new("")).join("");
