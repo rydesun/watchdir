@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
 use std::{
     cell::RefCell,
+    collections::HashMap,
+    ffi::OsString,
+    path::{Path, PathBuf},
     rc::{Rc, Weak},
 };
 
@@ -96,7 +96,7 @@ where
         Node::rename(Rc::clone(tree), old_path_rest, new_path_rest)
     }
 
-    pub fn get_full_path(&self, value: T, path: &Path) -> PathBuf {
+    pub fn full_path(&self, value: T, path: &Path) -> PathBuf {
         self.table[&value].borrow().path().join(path)
     }
 

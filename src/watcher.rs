@@ -9,9 +9,11 @@ use snafu::Snafu;
 use tracing::warn;
 use walkdir::WalkDir;
 
-use crate::inotify;
-use crate::inotify::{EventKind, EventSeq};
-use crate::path_tree;
+use crate::{
+    inotify,
+    inotify::{EventKind, EventSeq},
+    path_tree,
+};
 
 #[derive(PartialEq, Debug)]
 pub enum Event {
@@ -47,13 +49,13 @@ impl From<bool> for Dotdir {
 #[allow(clippy::enum_variant_names)]
 pub enum Error {
     #[snafu(display("Failed to use inotify API"))]
-    InotifyInit,
+    InitInotify,
 
     #[snafu(display("Failed to watch: {}: {}", path.display(), source))]
-    InotifyAdd { source: std::io::Error, path: PathBuf },
+    AddWatch { source: std::io::Error, path: PathBuf },
 
-    #[snafu(display("Duplicated watch: {}", path.display()))]
-    InotifyAddDup { wd: i32, path: PathBuf },
+    #[snafu(display("Watch the same path multiple times: {}", path.display()))]
+    WatchSame { wd: i32, path: PathBuf },
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -97,7 +99,7 @@ impl Watcher {
     pub fn new(dir: &Path, opts: WatcherOpts) -> Result<Self> {
         let fd = unsafe { libc::inotify_init() };
         if fd < 0 {
-            return Err(Error::InotifyInit);
+            return Err(Error::InitInotify);
         }
         let event_seq = EventSeq::new(fd);
 
@@ -112,7 +114,7 @@ impl Watcher {
             cached_inotify_event: None,
             cached_events: None,
         };
-        if let (Some(top_wd), _) = watcher.add_all_watch(dir) {
+        if let (Some(top_wd), _) = watcher.add_watch_all(dir) {
             watcher.top_wd = top_wd;
         }
 
@@ -129,7 +131,7 @@ impl Watcher {
             )
         };
         if wd < 0 {
-            return Err(Error::InotifyAdd {
+            return Err(Error::AddWatch {
                 source: std::io::Error::last_os_error(),
                 path: path.to_owned(),
             });
@@ -139,7 +141,7 @@ impl Watcher {
         Ok(wd)
     }
 
-    fn add_all_watch(&mut self, d: &Path) -> (Option<i32>, Vec<PathBuf>) {
+    fn add_watch_all(&mut self, d: &Path) -> (Option<i32>, Vec<PathBuf>) {
         let top_wd = match self.add_watch(d) {
             Err(e) => {
                 warn!("{}", e);
@@ -173,8 +175,8 @@ impl Watcher {
         (top_wd, new_dirs)
     }
 
-    fn get_full_path(&self, wd: i32, path: &Path) -> PathBuf {
-        self.path_tree.get_full_path(wd, path)
+    fn full_path(&self, wd: i32, path: &Path) -> PathBuf {
+        self.path_tree.full_path(wd, path)
     }
 
     fn update_path(&mut self, wd: i32, path: &Path) {
@@ -211,10 +213,8 @@ impl Iterator for Watcher {
                     self.cached_inotify_event = Some(inotify_event);
                     return Some(Event::MoveAway(path));
                 }
-                let full_path = self.get_full_path(
-                    inotify_event.wd,
-                    &inotify_event.path.unwrap(),
-                );
+                let full_path = self
+                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
                 self.prev = Some((
                     EventKind::MoveTo,
                     inotify_event.cookie,
@@ -237,14 +237,12 @@ impl Iterator for Watcher {
 
         match inotify_event.kind {
             EventKind::Create => {
-                let full_path = self.get_full_path(
-                    inotify_event.wd,
-                    &inotify_event.path.unwrap(),
-                );
+                let full_path = self
+                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
                 if let Ok(metadata) = fs::symlink_metadata(&full_path) {
                     if guard(self.opts, &full_path, metadata) {
                         self.cached_events = Some(Box::new(
-                            self.add_all_watch(&full_path)
+                            self.add_watch_all(&full_path)
                                 .1
                                 .into_iter()
                                 .map(Event::Create),
@@ -254,10 +252,8 @@ impl Iterator for Watcher {
                 Some(Event::Create(full_path))
             }
             EventKind::MoveFrom => {
-                let full_path = self.get_full_path(
-                    inotify_event.wd,
-                    &inotify_event.path.unwrap(),
-                );
+                let full_path = self
+                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
                 if self.event_seq.has_next_event() {
                     self.prev = Some((
                         EventKind::MoveFrom,
@@ -270,22 +266,18 @@ impl Iterator for Watcher {
                 }
             }
             EventKind::MoveTo => {
-                let full_path = self.get_full_path(
-                    inotify_event.wd,
-                    &inotify_event.path.unwrap(),
-                );
+                let full_path = self
+                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
                 if let Ok(metadata) = fs::symlink_metadata(&full_path) {
                     if guard(self.opts, &full_path, metadata) {
-                        self.add_all_watch(&full_path);
+                        self.add_watch_all(&full_path);
                     }
                 }
                 Some(Event::MoveInto(full_path))
             }
             EventKind::Delete => {
-                let full_path = self.get_full_path(
-                    inotify_event.wd,
-                    &inotify_event.path.unwrap(),
-                );
+                let full_path = self
+                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
                 Some(Event::Delete(full_path))
             }
             EventKind::DeleteSelf => {
@@ -304,10 +296,8 @@ impl Iterator for Watcher {
                 }
             }
             EventKind::Modify => {
-                let full_path = self.get_full_path(
-                    inotify_event.wd,
-                    &inotify_event.path.unwrap(),
-                );
+                let full_path = self
+                    .full_path(inotify_event.wd, &inotify_event.path.unwrap());
                 Some(Event::Modify(full_path))
             }
             EventKind::Ignored => Some(Event::Ignored),
@@ -340,8 +330,7 @@ fn guard(opts: WatcherOpts, path: &Path, metadata: Metadata) -> bool {
 mod tests {
     use std::fs::{create_dir, create_dir_all, rename, File};
 
-    use rand::distributions::Alphanumeric;
-    use rand::{thread_rng, Rng};
+    use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
     use super::*;
 

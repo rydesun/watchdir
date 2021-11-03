@@ -1,5 +1,4 @@
-use std::path::PathBuf;
-use std::{env, fs};
+use std::{env, fs, path::PathBuf};
 
 fn main() {
     if let Some(git_sha) = get_git_sha() {
