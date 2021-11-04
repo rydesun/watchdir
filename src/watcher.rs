@@ -67,6 +67,7 @@ pub struct Watcher {
     opts: WatcherOpts,
     fd: i32,
     top_wd: i32,
+    top_dir: PathBuf,
     path_tree: path_tree::Head<i32>,
     event_seq: EventSeq,
     cached_inotify_event: Option<inotify::Event>,
@@ -106,6 +107,7 @@ impl Watcher {
             fd,
             opts,
             top_wd: 0,
+            top_dir: dir.to_owned(),
             path_tree: path_tree::Head::new(dir.to_owned()),
             event_seq,
             cached_inotify_event: None,
@@ -208,13 +210,15 @@ impl Watcher {
                 if let Some(next_inotify_event) = self.next_inotify_event() {
                     match next_inotify_event.kind {
                         EventKind::MoveSelf => {
-                            if next_inotify_event.wd == self.top_wd {
-                                (Event::MoveTop(full_from_path), None)
-                            } else {
+                            if next_inotify_event.wd != self.top_wd {
                                 (
                                     Event::MoveAwayDir(full_from_path),
                                     Some(next_inotify_event.wd),
                                 )
+                            } else {
+                                self.cached_inotify_event =
+                                    Some(next_inotify_event);
+                                (Event::MoveAwayFile(full_from_path), None)
                             }
                         }
                         EventKind::MoveTo(ref to_path) => {
@@ -280,24 +284,36 @@ impl Watcher {
             EventKind::Delete(path) => {
                 let full_path = self.full_path(wd, &path);
                 if let Some(next_inotify_event) = self.next_inotify_event() {
-                    if next_inotify_event.wd == self.top_wd {
-                        (Event::DeleteTop(full_path), None)
-                    } else {
-                        match next_inotify_event.kind {
-                            EventKind::DeleteSelf => (
-                                Event::DeleteDir(full_path),
-                                Some(next_inotify_event.wd),
-                            ),
-                            _ => {
+                    match next_inotify_event.kind {
+                        EventKind::DeleteSelf => {
+                            if next_inotify_event.wd == self.top_wd {
                                 self.cached_inotify_event =
                                     Some(next_inotify_event);
                                 (Event::DeleteFile(full_path), None)
+                            } else {
+                                (
+                                    Event::DeleteDir(full_path),
+                                    Some(next_inotify_event.wd),
+                                )
                             }
+                        }
+                        _ => {
+                            self.cached_inotify_event =
+                                Some(next_inotify_event);
+                            (Event::DeleteFile(full_path), None)
                         }
                     }
                 } else {
                     (Event::DeleteFile(full_path), None)
                 }
+            }
+
+            EventKind::MoveSelf => {
+                (Event::MoveTop(self.top_dir.to_owned()), None)
+            }
+
+            EventKind::DeleteSelf => {
+                (Event::DeleteTop(self.top_dir.to_owned()), None)
             }
 
             EventKind::Modify(path) => {
@@ -353,6 +369,10 @@ impl Iterator for Watcher {
                     }
                 }
             }
+            Event::DeleteTop(_) => {
+                self.rm_watch_all(self.top_wd);
+            }
+
             _ => {}
         }
 
@@ -469,6 +489,24 @@ mod tests {
         rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
 
         assert_eq!(watcher.next().unwrap(), Event::MoveDir(old_dir, new_dir))
+    }
+
+    #[test]
+    fn test_move_top_dir() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let top_dir = top_dir.path().to_owned();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let new_top_dir = temp_dir.path().join(random_string(5));
+
+        let mut watcher = Watcher::new(
+            top_dir.as_ref(),
+            WatcherOpts::new(Dotdir::Exclude, false),
+        )
+        .unwrap();
+
+        rename(&top_dir, new_top_dir).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::MoveTop(top_dir))
     }
 
     #[test]
@@ -701,6 +739,21 @@ mod tests {
 
         fs::remove_dir(&dir).unwrap();
         assert_eq!(watcher.next().unwrap(), Event::DeleteDir(dir))
+    }
+
+    #[test]
+    fn test_remove_top_dir() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let top_dir = top_dir.path().to_owned();
+
+        let mut watcher = Watcher::new(
+            top_dir.as_ref(),
+            WatcherOpts::new(Dotdir::Exclude, false),
+        )
+        .unwrap();
+
+        fs::remove_dir(&top_dir).unwrap();
+        assert_eq!(watcher.next().unwrap(), Event::DeleteTop(top_dir))
     }
 
     #[test]
