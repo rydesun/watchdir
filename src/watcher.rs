@@ -1,6 +1,6 @@
 use std::{
     ffi::CString,
-    fs::{self, Metadata},
+    fs::{self, FileType},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
 };
@@ -152,13 +152,7 @@ impl Watcher {
         WalkDir::new(d)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|e| {
-                if let Ok(metadata) = e.metadata() {
-                    guard(opts, e.path(), metadata)
-                } else {
-                    false
-                }
-            })
+            .filter_entry(|e| guard(opts, e.path(), e.file_type()))
             .filter_map(Result::ok)
             .for_each(|e| {
                 let dir = e.path();
@@ -342,14 +336,14 @@ impl Iterator for Watcher {
             }
             Event::MoveInto(ref path) => {
                 if let Ok(metadata) = fs::symlink_metadata(path) {
-                    if guard(self.opts, path, metadata) {
+                    if guard(self.opts, path, metadata.file_type()) {
                         self.add_watch_all(path);
                     }
                 }
             }
             Event::Create(ref path) => {
                 if let Ok(metadata) = fs::symlink_metadata(path) {
-                    if guard(self.opts, path, metadata) {
+                    if guard(self.opts, path, metadata.file_type()) {
                         self.cached_events = Some(Box::new(
                             self.add_watch_all(path)
                                 .1
@@ -374,9 +368,8 @@ impl Drop for Watcher {
     }
 }
 
-fn guard(opts: WatcherOpts, path: &Path, metadata: Metadata) -> bool {
-    // FIXME: metadata is unreliable
-    if !metadata.is_dir() {
+fn guard(opts: WatcherOpts, path: &Path, file_type: FileType) -> bool {
+    if !file_type.is_dir() {
         return false;
     }
     if path.file_name().unwrap().as_bytes()[0] == b'.' {
