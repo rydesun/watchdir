@@ -15,6 +15,8 @@ const MAX_INOTIFY_EVENT_SIZE: usize =
     INOTIFY_EVENT_HEADER_SIZE + MAX_FILENAME_LENGTH + 1;
 
 pub struct EventSeq {
+    #[allow(dead_code)]
+    fd: i32,
     file: File,
     pollfd: libc::pollfd,
     buffer: [u8; MAX_INOTIFY_EVENT_SIZE],
@@ -25,6 +27,7 @@ pub struct EventSeq {
 impl EventSeq {
     pub fn new(fd: i32) -> Self {
         Self {
+            fd,
             file: unsafe { File::from_raw_fd(fd) },
             pollfd: libc::pollfd { fd, events: libc::POLLIN, revents: 0 },
             buffer: [0; MAX_INOTIFY_EVENT_SIZE],
@@ -86,9 +89,13 @@ impl EventSeq {
         const TIMEOUT: i32 = 0;
 
         if self.offset >= self.len {
+            // XXX: ioctl is invalid
+            // let n = unsafe { libc::ioctl(self.fd, libc::FIONREAD) };
             let n = unsafe { libc::poll(&mut self.pollfd, 1, TIMEOUT) };
+            debug!("Check if there are more events: n = {}", n);
             n > 0
         } else {
+            debug!("{}", "Buffer has content");
             true
         }
     }

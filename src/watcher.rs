@@ -492,6 +492,24 @@ mod tests {
     }
 
     #[test]
+    fn test_move_long_name_dir() {
+        let top_dir = tempfile::tempdir().unwrap();
+        let old_dir = top_dir.path().join(random_string(180));
+        create_dir(&old_dir).unwrap();
+
+        let mut watcher = Watcher::new(
+            top_dir.as_ref(),
+            WatcherOpts::new(Dotdir::Exclude, false),
+        )
+        .unwrap();
+
+        let new_dir = top_dir.path().join(random_string(180));
+        rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
+
+        assert_eq!(watcher.next().unwrap(), Event::MoveDir(old_dir, new_dir))
+    }
+
+    #[test]
     fn test_move_top_dir() {
         let top_dir = tempfile::tempdir().unwrap();
         let top_dir = top_dir.path().to_owned();
