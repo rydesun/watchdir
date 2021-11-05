@@ -1,6 +1,6 @@
 mod cli;
 
-use std::{io::Write, path::Path};
+use std::{io::Write, path::Path, time};
 
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -22,6 +22,7 @@ fn main() {
     info!("version: {}", *cli::VERSION);
 
     info!("Initializing...");
+    let now = time::Instant::now();
     let watcher = match Watcher::new(
         opts.dir.as_ref().unwrap(),
         WatcherOpts::new(opts.include_hidden.into(), opts.modify_event),
@@ -32,7 +33,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    info!("Initialized successfully!");
+    info!("Initialized successfully! Elapsed time: {:?}", now.elapsed());
 
     let mut stdout = StandardStream::stdout((&opts.color).into());
     for event in watcher {
