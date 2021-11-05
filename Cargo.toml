@@ -29,8 +29,13 @@ walkdir = "2"
 time = "0.3"
 
 [dev-dependencies]
+criterion = { version = "0.3", features = ["html_reports"] }
 rand = "0.8"
 tempfile = "3"
+
+[[bench]]
+name = "benchmark"
+harness = false
 
 [profile.release]
 lto = true
