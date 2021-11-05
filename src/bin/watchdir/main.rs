@@ -1,7 +1,4 @@
 mod cli;
-mod inotify;
-mod path_tree;
-mod watcher;
 
 use std::{io::Write, path::Path};
 
@@ -9,8 +6,7 @@ use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
-
-use crate::watcher::Event;
+use watchdir::{Event, Watcher, WatcherOpts};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -26,12 +22,9 @@ fn main() {
     info!("version: {}", *cli::VERSION);
 
     info!("Initializing...");
-    let watcher = match watcher::Watcher::new(
+    let watcher = match Watcher::new(
         opts.dir.as_ref().unwrap(),
-        watcher::WatcherOpts::new(
-            opts.include_hidden.into(),
-            opts.modify_event,
-        ),
+        WatcherOpts::new(opts.include_hidden.into(), opts.modify_event),
     ) {
         Ok(watcher) => watcher,
         Err(e) => {
@@ -51,13 +44,13 @@ fn main() {
         )
         .unwrap();
         match event {
-            watcher::Event::MoveTop(_) => {
+            Event::MoveTop(_) => {
                 warn!(
                     "Watched dir was moved. The prefix of path can no longer \
                      be trusted!"
                 );
             }
-            watcher::Event::DeleteTop(_) => {
+            Event::DeleteTop(_) => {
                 warn!("Watched dir was deleted.");
                 std::process::exit(0);
             }
@@ -68,7 +61,7 @@ fn main() {
 
 fn print_event(
     stdout: &mut StandardStream,
-    event: &watcher::Event,
+    event: &Event,
     path_prefix: &Path,
     need_prefix: bool,
 ) -> Result<(), std::io::Error> {

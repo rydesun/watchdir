@@ -1,3 +1,6 @@
+mod inotify;
+mod path_tree;
+
 use std::{
     ffi::CString,
     fs::{self, FileType},
@@ -8,12 +11,6 @@ use std::{
 use snafu::Snafu;
 use tracing::warn;
 use walkdir::WalkDir;
-
-use crate::{
-    inotify,
-    inotify::{EventKind, EventSeq},
-    path_tree,
-};
 
 #[derive(PartialEq, Debug)]
 pub enum Event {
@@ -69,7 +66,7 @@ pub struct Watcher {
     top_wd: i32,
     top_dir: PathBuf,
     path_tree: path_tree::Head<i32>,
-    event_seq: EventSeq,
+    event_seq: inotify::EventSeq,
     cached_inotify_event: Option<inotify::Event>,
     cached_events: Option<Box<dyn Iterator<Item = Event>>>,
 }
@@ -101,7 +98,7 @@ impl Watcher {
         if fd < 0 {
             return Err(Error::InitInotify);
         }
-        let event_seq = EventSeq::new(fd);
+        let event_seq = inotify::EventSeq::new(fd);
 
         let mut watcher = Self {
             fd,
@@ -200,16 +197,16 @@ impl Watcher {
         let wd = inotify_event.wd;
 
         match inotify_event.kind {
-            EventKind::Create(path) => {
+            inotify::EventKind::Create(path) => {
                 let full_path = self.full_path(wd, &path);
                 (Event::Create(full_path), None)
             }
 
-            EventKind::MoveFrom(from_path) => {
+            inotify::EventKind::MoveFrom(from_path) => {
                 let full_from_path = self.full_path(wd, &from_path);
                 if let Some(next_inotify_event) = self.next_inotify_event() {
                     match next_inotify_event.kind {
-                        EventKind::MoveSelf => {
+                        inotify::EventKind::MoveSelf => {
                             if next_inotify_event.wd != self.top_wd {
                                 (
                                     Event::MoveAwayDir(full_from_path),
@@ -221,7 +218,7 @@ impl Watcher {
                                 (Event::MoveAwayFile(full_from_path), None)
                             }
                         }
-                        EventKind::MoveTo(ref to_path) => {
+                        inotify::EventKind::MoveTo(ref to_path) => {
                             if inotify_event.cookie
                                 != next_inotify_event.cookie
                             {
@@ -235,7 +232,7 @@ impl Watcher {
                                     self.next_inotify_event()
                                 {
                                     match next2_inotify_event.kind {
-                                        EventKind::MoveSelf => (
+                                        inotify::EventKind::MoveSelf => (
                                             Event::MoveDir(
                                                 full_from_path,
                                                 full_to_path,
@@ -276,16 +273,16 @@ impl Watcher {
                 }
             }
 
-            EventKind::MoveTo(path) => {
+            inotify::EventKind::MoveTo(path) => {
                 let full_path = self.full_path(wd, &path);
                 (Event::MoveInto(full_path), None)
             }
 
-            EventKind::Delete(path) => {
+            inotify::EventKind::Delete(path) => {
                 let full_path = self.full_path(wd, &path);
                 if let Some(next_inotify_event) = self.next_inotify_event() {
                     match next_inotify_event.kind {
-                        EventKind::DeleteSelf => {
+                        inotify::EventKind::DeleteSelf => {
                             if next_inotify_event.wd == self.top_wd {
                                 self.cached_inotify_event =
                                     Some(next_inotify_event);
@@ -308,20 +305,20 @@ impl Watcher {
                 }
             }
 
-            EventKind::MoveSelf => {
+            inotify::EventKind::MoveSelf => {
                 (Event::MoveTop(self.top_dir.to_owned()), None)
             }
 
-            EventKind::DeleteSelf => {
+            inotify::EventKind::DeleteSelf => {
                 (Event::DeleteTop(self.top_dir.to_owned()), None)
             }
 
-            EventKind::Modify(path) => {
+            inotify::EventKind::Modify(path) => {
                 let full_path = self.full_path(wd, &path);
                 (Event::Modify(full_path), None)
             }
 
-            EventKind::Ignored => (Event::Ignored, None),
+            inotify::EventKind::Ignored => (Event::Ignored, None),
             _ => (Event::Unknown, None),
         }
     }
