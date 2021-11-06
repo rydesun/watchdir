@@ -25,6 +25,8 @@ pub enum Event {
     DeleteFile(PathBuf),
     DeleteTop(PathBuf),
     Modify(PathBuf),
+    Unmount(PathBuf),
+    UnmountTop(PathBuf),
     Ignored,
     Unknown,
 }
@@ -165,8 +167,12 @@ impl Watcher {
         (top_wd, new_dirs)
     }
 
+    fn path(&self, wd: i32) -> PathBuf {
+        self.path_tree.path(wd)
+    }
+
     fn full_path(&self, wd: i32, path: &Path) -> PathBuf {
-        self.path_tree.full_path(wd, path)
+        self.path(wd).join(path)
     }
 
     fn update_path(&mut self, wd: i32, path: &Path) {
@@ -318,6 +324,15 @@ impl Watcher {
                 (Event::Modify(full_path), None)
             }
 
+            inotify::EventKind::Unmount => {
+                if inotify_event.wd == self.top_wd {
+                    (Event::UnmountTop(self.top_dir.to_owned()), None)
+                } else {
+                    let full_path = self.path(wd);
+                    (Event::Unmount(full_path), None)
+                }
+            }
+
             inotify::EventKind::Ignored => (Event::Ignored, None),
             _ => (Event::Unknown, None),
         }
@@ -366,8 +381,11 @@ impl Iterator for Watcher {
                     }
                 }
             }
-            Event::DeleteTop(_) => {
+            Event::DeleteTop(_) | Event::UnmountTop(_) => {
                 self.rm_watch_all(self.top_wd);
+            }
+            Event::Unmount(_) => {
+                self.rm_watch_all(inotify_event.wd);
             }
 
             _ => {}

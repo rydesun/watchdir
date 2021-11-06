@@ -78,6 +78,7 @@ impl EventSeq {
             i if i & libc::IN_DELETE > 0 => EventKind::Delete(path.unwrap()),
             i if i & libc::IN_DELETE_SELF > 0 => EventKind::DeleteSelf,
             i if i & libc::IN_MODIFY > 0 => EventKind::Modify(path.unwrap()),
+            i if i & libc::IN_UNMOUNT > 0 => EventKind::Unmount,
             i if i & libc::IN_IGNORED > 0 => EventKind::Ignored,
             _ => EventKind::Unknown,
         };
@@ -146,6 +147,7 @@ pub enum EventKind {
     Delete(PathBuf),
     DeleteSelf,
     Modify(PathBuf),
+    Unmount,
     Ignored,
     Unknown,
 }

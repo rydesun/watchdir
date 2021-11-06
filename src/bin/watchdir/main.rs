@@ -55,6 +55,10 @@ fn main() {
                 warn!("Watched dir was deleted.");
                 std::process::exit(0);
             }
+            Event::UnmountTop(_) => {
+                warn!("Watched dir was unmounted.");
+                std::process::exit(0);
+            }
             _ => {}
         }
     }
@@ -78,6 +82,8 @@ fn print_event(
         Event::Modify(path) => ("Modify", Some(path), Color::Yellow),
         Event::MoveTop(path) => ("MoveTop", Some(path), Color::Red),
         Event::DeleteTop(path) => ("DeleteTop", Some(path), Color::Red),
+        Event::Unmount(path) => ("Unmount", Some(path), Color::Magenta),
+        Event::UnmountTop(path) => ("UnmountTop", Some(path), Color::Red),
         Event::Unknown => ("Unknown", None, Color::Red),
         Event::Ignored => return Ok(()),
     };
@@ -115,7 +121,9 @@ fn print_event(
             write_color!(stdout, (color)[set_bold])?;
             write!(stdout, "{}", to_rest.to_string_lossy())?;
         }
-        Event::MoveTop(path) | Event::DeleteTop(path) => {
+        Event::MoveTop(path)
+        | Event::DeleteTop(path)
+        | Event::UnmountTop(path) => {
             write_color!(stdout, (color)[set_bold])?;
             write!(stdout, "{}", path.to_string_lossy())?;
         }

@@ -96,8 +96,8 @@ where
         Node::rename(Rc::clone(tree), old_path_rest, new_path_rest)
     }
 
-    pub fn full_path(&self, value: T, path: &Path) -> PathBuf {
-        self.table[&value].borrow().path().join(path)
+    pub fn path(&self, value: T) -> PathBuf {
+        self.table[&value].borrow().path()
     }
 
     pub fn values(&self) -> impl Iterator<Item = &T> {
