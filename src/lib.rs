@@ -85,7 +85,8 @@ impl WatcherOpts {
             | libc::IN_MOVE
             | libc::IN_MOVE_SELF
             | libc::IN_DELETE
-            | libc::IN_DELETE_SELF;
+            | libc::IN_DELETE_SELF
+            | libc::IN_ONLYDIR;
         if modify_event {
             event_types |= libc::IN_MODIFY;
         }
