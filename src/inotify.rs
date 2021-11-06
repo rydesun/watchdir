@@ -39,8 +39,18 @@ impl EventSeq {
     #[instrument(skip(self), fields(len=self.len, offset=self.offset))]
     fn parse(&self) -> Event {
         let raw = &self.buffer[self.offset..];
-        let raw_event: libc::inotify_event =
-            unsafe { std::ptr::read(raw.as_ptr() as *const _) };
+        let raw_event: libc::inotify_event;
+        loop {
+            let res: libc::inotify_event =
+                unsafe { std::ptr::read(raw.as_ptr() as *const _) };
+            if res.wd > 0 {
+                raw_event = res;
+                break;
+            } else {
+                // FIXME: What happened?
+                debug!("Invalid inotify event");
+            }
+        }
 
         let path = if raw_event.len > 0 {
             let raw_path = unsafe {
@@ -86,7 +96,7 @@ impl EventSeq {
     pub fn has_next_event(&mut self) -> bool {
         // HACK: These milliseconds represent the waiting for next event.
         // Consider a more appropriate value.
-        const TIMEOUT: i32 = 0;
+        const TIMEOUT: i32 = 1;
 
         if self.offset >= self.len {
             // XXX: ioctl is invalid

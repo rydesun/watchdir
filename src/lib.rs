@@ -192,18 +192,18 @@ impl Watcher {
 
     fn recognize(
         &mut self,
-        inotify_event: inotify::Event,
+        inotify_event: &inotify::Event,
     ) -> (Event, Option<i32>) {
         let wd = inotify_event.wd;
 
-        match inotify_event.kind {
+        match &inotify_event.kind {
             inotify::EventKind::Create(path) => {
-                let full_path = self.full_path(wd, &path);
+                let full_path = self.full_path(wd, path);
                 (Event::Create(full_path), None)
             }
 
             inotify::EventKind::MoveFrom(from_path) => {
-                let full_from_path = self.full_path(wd, &from_path);
+                let full_from_path = self.full_path(wd, from_path);
                 if let Some(next_inotify_event) = self.next_inotify_event() {
                     match next_inotify_event.kind {
                         inotify::EventKind::MoveSelf => {
@@ -274,12 +274,12 @@ impl Watcher {
             }
 
             inotify::EventKind::MoveTo(path) => {
-                let full_path = self.full_path(wd, &path);
+                let full_path = self.full_path(wd, path);
                 (Event::MoveInto(full_path), None)
             }
 
             inotify::EventKind::Delete(path) => {
-                let full_path = self.full_path(wd, &path);
+                let full_path = self.full_path(wd, path);
                 if let Some(next_inotify_event) = self.next_inotify_event() {
                     match next_inotify_event.kind {
                         inotify::EventKind::DeleteSelf => {
@@ -314,7 +314,7 @@ impl Watcher {
             }
 
             inotify::EventKind::Modify(path) => {
-                let full_path = self.full_path(wd, &path);
+                let full_path = self.full_path(wd, path);
                 (Event::Modify(full_path), None)
             }
 
@@ -338,7 +338,7 @@ impl Iterator for Watcher {
             .take()
             .unwrap_or_else(|| self.event_seq.next().unwrap());
 
-        let (event, wd) = self.recognize(inotify_event);
+        let (event, wd) = self.recognize(&inotify_event);
 
         match event {
             Event::MoveDir(_, ref path) => {
