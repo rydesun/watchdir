@@ -93,8 +93,8 @@ fn print_event(
         Event::CloseTop(_) => ("Close", None, Color::Cyan),
         Event::Access(path) => ("Access", Some(path), Color::Cyan),
         Event::AccessTop(_) => ("Access", None, Color::Cyan),
-        Event::Attrib(path) => ("Attrib", Some(path), Color::Cyan),
-        Event::AttribTop(_) => ("Attrib", None, Color::Cyan),
+        Event::Attrib(path) => ("Attrib", Some(path), Color::Yellow),
+        Event::AttribTop(_) => ("Attrib", None, Color::Yellow),
         Event::MoveTop(path) => ("MoveTop", Some(path), Color::Red),
         Event::DeleteTop(path) => ("DeleteTop", Some(path), Color::Red),
         Event::Unmount(path) => ("Unmount", Some(path), Color::Magenta),
@@ -144,7 +144,7 @@ fn print_event(
         | Event::AttribTop(path)
         | Event::OpenTop(path)
         | Event::CloseTop(path) => {
-            write_color!(stdout, (color)[set_bold])?;
+            write_color!(stdout, reset)?;
             write!(stdout, "{}", path.to_string_lossy())?;
         }
         _ => {
@@ -164,7 +164,7 @@ fn print_event(
         }
     }
 
-    write_color!(stdout, reset);
+    write_color!(stdout, reset)?;
     writeln!(stdout)?;
     Ok(())
 }
@@ -222,7 +222,7 @@ impl From<&cli::ColorWhen> for ColorChoice {
 #[macro_export]
 macro_rules! write_color {
     ( $writer:expr, reset ) => {
-        $writer.set_color(&ColorSpec::new())?;
+        $writer.set_color(&ColorSpec::new())
     };
 
     (
