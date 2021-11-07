@@ -25,8 +25,17 @@ pub enum Event {
     DeleteFile(PathBuf),
     DeleteTop(PathBuf),
     Modify(PathBuf),
+    Access(PathBuf),
+    AccessTop(PathBuf),
+    Attrib(PathBuf),
+    AttribTop(PathBuf),
+    Open(PathBuf),
+    OpenTop(PathBuf),
+    Close(PathBuf),
+    CloseTop(PathBuf),
     Unmount(PathBuf),
     UnmountTop(PathBuf),
+    Noise,
     Ignored,
     Unknown,
 }
@@ -70,19 +79,31 @@ pub struct WatcherOpts {
 }
 
 impl WatcherOpts {
-    pub fn new(sub_dotdir: Dotdir, modify_event: bool) -> Self {
+    pub fn new(sub_dotdir: Dotdir, extra_events: Vec<ExtraEvent>) -> Self {
         let mut event_types = libc::IN_CREATE
             | libc::IN_MOVE
             | libc::IN_MOVE_SELF
             | libc::IN_DELETE
             | libc::IN_DELETE_SELF
             | libc::IN_ONLYDIR;
-        if modify_event {
-            event_types |= libc::IN_MODIFY;
-        }
+        event_types = extra_events.iter().fold(event_types, |v, e| match e {
+            ExtraEvent::Modify => v | libc::IN_MODIFY,
+            ExtraEvent::Access => v | libc::IN_ACCESS,
+            ExtraEvent::Attrib => v | libc::IN_ATTRIB,
+            ExtraEvent::Open => v | libc::IN_OPEN,
+            ExtraEvent::Close => v | libc::IN_CLOSE,
+        });
 
         Self { sub_dotdir, event_types }
     }
+}
+
+pub enum ExtraEvent {
+    Modify,
+    Access,
+    Attrib,
+    Open,
+    Close,
 }
 
 impl Watcher {
@@ -320,6 +341,58 @@ impl Watcher {
                 let full_path = self.full_path(wd, path);
                 (Event::Modify(full_path), None)
             }
+            inotify::EventKind::Access(path) => match path {
+                Some(path) => {
+                    let full_path = self.full_path(wd, path);
+                    (Event::Access(full_path), None)
+                }
+                None => {
+                    if wd == self.top_wd {
+                        (Event::AccessTop(self.top_dir.to_owned()), None)
+                    } else {
+                        (Event::Noise, None)
+                    }
+                }
+            },
+            inotify::EventKind::Attrib(path) => match path {
+                Some(path) => {
+                    let full_path = self.full_path(wd, path);
+                    (Event::Attrib(full_path), None)
+                }
+                None => {
+                    if wd == self.top_wd {
+                        (Event::AttribTop(self.top_dir.to_owned()), None)
+                    } else {
+                        (Event::Noise, None)
+                    }
+                }
+            },
+            inotify::EventKind::Open(path) => match path {
+                Some(path) => {
+                    let full_path = self.full_path(wd, path);
+                    (Event::Open(full_path), None)
+                }
+                None => {
+                    if wd == self.top_wd {
+                        (Event::OpenTop(self.top_dir.to_owned()), None)
+                    } else {
+                        (Event::Noise, None)
+                    }
+                }
+            },
+            inotify::EventKind::Close(path) => match path {
+                Some(path) => {
+                    let full_path = self.full_path(wd, path);
+                    (Event::Close(full_path), None)
+                }
+                None => {
+                    if wd == self.top_wd {
+                        (Event::CloseTop(self.top_dir.to_owned()), None)
+                    } else {
+                        (Event::Noise, None)
+                    }
+                }
+            },
 
             inotify::EventKind::Unmount => {
                 if inotify_event.wd == self.top_wd {
@@ -331,7 +404,7 @@ impl Watcher {
             }
 
             inotify::EventKind::Ignored => (Event::Ignored, None),
-            _ => (Event::Unknown, None),
+            inotify::EventKind::Unknown => (Event::Unknown, None),
         }
     }
 }
@@ -345,12 +418,17 @@ impl Iterator for Watcher {
                 return Some(event);
             }
         }
-        let inotify_event = self
-            .cached_inotify_event
-            .take()
-            .unwrap_or_else(|| self.event_seq.next().unwrap());
 
-        let (event, wd) = self.recognize(&inotify_event);
+        let (inotify_event, event, wd) = loop {
+            let inotify_event = self
+                .cached_inotify_event
+                .take()
+                .unwrap_or_else(|| self.event_seq.next().unwrap());
+            let (event, wd) = self.recognize(&inotify_event);
+            if event != Event::Noise {
+                break (inotify_event, event, wd);
+            }
+        };
 
         match event {
             Event::MoveDir(_, ref path) => {

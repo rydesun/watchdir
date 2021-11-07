@@ -15,7 +15,7 @@ fn test_create_file() {
     let top_dir = tempfile::tempdir().unwrap();
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -29,7 +29,7 @@ fn test_create_in_created_subdir() {
     let top_dir = tempfile::tempdir().unwrap();
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -47,7 +47,7 @@ fn test_create_in_recur_created_subdir() {
     let top_dir = tempfile::tempdir().unwrap();
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -76,7 +76,7 @@ fn test_move_dir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -94,7 +94,7 @@ fn test_move_long_name_dir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -113,7 +113,7 @@ fn test_move_top_dir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -136,7 +136,7 @@ fn test_create_in_moved_subdir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -168,7 +168,7 @@ fn test_create_in_moved_dir_in_subdir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -192,7 +192,7 @@ fn test_move_file() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -211,7 +211,7 @@ fn test_dir_move_away() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -234,7 +234,7 @@ fn test_file_move_away() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -253,7 +253,7 @@ fn test_dir_move_into() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -276,7 +276,7 @@ fn test_file_move_into() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -300,7 +300,7 @@ fn test_file_move_away_and_move_into() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -322,7 +322,7 @@ fn test_remove_file() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -339,7 +339,7 @@ fn test_remove_dir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -354,7 +354,7 @@ fn test_remove_top_dir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -377,7 +377,7 @@ fn test_remove_dir_recursively() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -402,7 +402,7 @@ fn test_include_hidden_dir() {
 
     let mut watcher = Watcher::new(
         tempdir.as_ref(),
-        WatcherOpts::new(Dotdir::Include, false),
+        WatcherOpts::new(Dotdir::Include, Vec::new()),
     )
     .unwrap();
 
@@ -419,7 +419,7 @@ fn test_exclude_hidden_dir() {
 
     let mut watcher = Watcher::new(
         tempdir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -434,7 +434,7 @@ fn test_exclude_new_hidden_dir() {
 
     let mut watcher = Watcher::new(
         tempdir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 
@@ -455,7 +455,7 @@ fn test_must_include_hidden_top_dir() {
 
     let mut watcher = Watcher::new(
         top_dir.as_ref(),
-        WatcherOpts::new(Dotdir::Exclude, false),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
     )
     .unwrap();
 

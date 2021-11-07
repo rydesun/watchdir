@@ -34,9 +34,9 @@ pub struct Opts {
     #[clap(long)]
     pub debug: bool,
 
-    /// Include modification events
-    #[clap(long)]
-    pub modify_event: bool,
+    /// Include extra events
+    #[clap(long, arg_enum, use_delimiter = true)]
+    pub extra_events: Vec<ExtraEvent>,
 
     /// Canonicalize paths
     #[clap(long)]
@@ -53,6 +53,15 @@ pub struct Opts {
     /// Generate completions for shell
     #[clap(value_name = "SHELL", long, arg_enum)]
     pub completion: Option<Shell>,
+}
+
+#[derive(ArgEnum)]
+pub enum ExtraEvent {
+    Modify,
+    Access,
+    Attrib,
+    Open,
+    Close,
 }
 
 #[derive(ArgEnum)]

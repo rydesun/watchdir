@@ -31,7 +31,7 @@ fn main() {
             } else {
                 watchdir::Dotdir::Exclude
             },
-            opts.modify_event,
+            opts.extra_events.into_iter().map(|e| e.into()).collect(),
         ),
     ) {
         Ok(watcher) => watcher,
@@ -87,12 +87,21 @@ fn print_event(
         Event::MoveAwayFile(path) => ("MoveAway", Some(path), Color::Blue),
         Event::MoveInto(path) => ("MoveInto", Some(path), Color::Blue),
         Event::Modify(path) => ("Modify", Some(path), Color::Yellow),
+        Event::Open(path) => ("Open", Some(path), Color::Cyan),
+        Event::OpenTop(_) => ("Open", None, Color::Cyan),
+        Event::Close(path) => ("Close", Some(path), Color::Cyan),
+        Event::CloseTop(_) => ("Close", None, Color::Cyan),
+        Event::Access(path) => ("Access", Some(path), Color::Cyan),
+        Event::AccessTop(_) => ("Access", None, Color::Cyan),
+        Event::Attrib(path) => ("Attrib", Some(path), Color::Cyan),
+        Event::AttribTop(_) => ("Attrib", None, Color::Cyan),
         Event::MoveTop(path) => ("MoveTop", Some(path), Color::Red),
         Event::DeleteTop(path) => ("DeleteTop", Some(path), Color::Red),
         Event::Unmount(path) => ("Unmount", Some(path), Color::Magenta),
         Event::UnmountTop(path) => ("UnmountTop", Some(path), Color::Red),
         Event::Unknown => ("Unknown", None, Color::Red),
         Event::Ignored => return Ok(()),
+        Event::Noise => panic!("Noise should never leak"),
     };
 
     write_color!(stdout, (color)[set_bold])?;
@@ -130,7 +139,11 @@ fn print_event(
         }
         Event::MoveTop(path)
         | Event::DeleteTop(path)
-        | Event::UnmountTop(path) => {
+        | Event::UnmountTop(path)
+        | Event::AccessTop(path)
+        | Event::AttribTop(path)
+        | Event::OpenTop(path)
+        | Event::CloseTop(path) => {
             write_color!(stdout, (color)[set_bold])?;
             write!(stdout, "{}", path.to_string_lossy())?;
         }
@@ -176,6 +189,18 @@ fn isatty_stdout() -> bool {
 
 fn isatty_stderr() -> bool {
     unsafe { libc::isatty(libc::STDERR_FILENO) != 0 }
+}
+
+impl From<cli::ExtraEvent> for watchdir::ExtraEvent {
+    fn from(v: cli::ExtraEvent) -> Self {
+        match v {
+            cli::ExtraEvent::Modify => watchdir::ExtraEvent::Modify,
+            cli::ExtraEvent::Attrib => watchdir::ExtraEvent::Attrib,
+            cli::ExtraEvent::Access => watchdir::ExtraEvent::Access,
+            cli::ExtraEvent::Open => watchdir::ExtraEvent::Open,
+            cli::ExtraEvent::Close => watchdir::ExtraEvent::Close,
+        }
+    }
 }
 
 impl From<&cli::ColorWhen> for ColorChoice {

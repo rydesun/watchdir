@@ -12,7 +12,7 @@ use watchdir::{Dotdir, Watcher, WatcherOpts};
 pub fn bench_watch_dir_with_subdirs(c: &mut Criterion) {
     let mut group = c.benchmark_group("Watch with subdirs");
 
-    let opts = WatcherOpts::new(Dotdir::Exclude, false);
+    let opts = WatcherOpts::new(Dotdir::Exclude, Vec::new());
 
     for i in (0..=100).step_by(20) {
         let top_dir_with_subdirs = tempfile::tempdir().unwrap();
@@ -33,7 +33,7 @@ pub fn bench_watch_dir_with_subdirs(c: &mut Criterion) {
 pub fn bench_move_dir_with_subdirs(c: &mut Criterion) {
     let mut group = c.benchmark_group("Move with subdirs");
 
-    let opts = WatcherOpts::new(Dotdir::Exclude, false);
+    let opts = WatcherOpts::new(Dotdir::Exclude, Vec::new());
 
     let tempdir = tempfile::tempdir().unwrap();
     let dest_tempdir = tempdir.path().join(random_string(5));
