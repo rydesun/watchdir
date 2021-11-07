@@ -86,7 +86,7 @@ pub fn bench_program_init(c: &mut Criterion) {
             b.iter(|| {
                 let mut p =
                     std::process::Command::new(env!("CARGO_BIN_EXE_watchdir"))
-                        .arg("--hidden")
+                        .arg("--include-hidden")
                         .arg(top_dir_with_subdirs.path())
                         .stderr(Stdio::piped())
                         .spawn()
@@ -157,7 +157,7 @@ pub fn bench_program_watch_move_dir(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("watchdir", i), |b| {
             let mut p =
                 std::process::Command::new(env!("CARGO_BIN_EXE_watchdir"))
-                    .arg("--hidden")
+                    .arg("--include-hidden")
                     .arg(topdir.path())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())

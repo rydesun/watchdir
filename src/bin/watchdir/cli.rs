@@ -22,7 +22,7 @@ lazy_static! {
 #[clap(term_width = 79)]
 pub struct Opts {
     /// Include hidden subdirectories
-    #[clap(name = "hidden", short = 'H', long)]
+    #[clap(short = 'H', long)]
     pub include_hidden: bool,
 
     /// The directory to be watched

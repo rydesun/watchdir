@@ -393,3 +393,73 @@ fn test_remove_dir_recursively() {
         sub_dir.pop();
     }
 }
+
+#[test]
+fn test_include_hidden_dir() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let dotdir = tempdir.as_ref().join(".dotdir");
+    fs::create_dir(&dotdir).unwrap();
+
+    let mut watcher = Watcher::new(
+        tempdir.as_ref(),
+        WatcherOpts::new(Dotdir::Include, false),
+    )
+    .unwrap();
+
+    let file = dotdir.join(random_string(5));
+    File::create(&file).unwrap();
+    assert_eq!(watcher.next().unwrap(), Event::Create(file));
+}
+
+#[test]
+fn test_exclude_hidden_dir() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let dotdir = tempdir.as_ref().join(".dotdir");
+    fs::create_dir(&dotdir).unwrap();
+
+    let mut watcher = Watcher::new(
+        tempdir.as_ref(),
+        WatcherOpts::new(Dotdir::Exclude, false),
+    )
+    .unwrap();
+
+    let file = dotdir.join(random_string(5));
+    File::create(&file).unwrap();
+    assert!(!watcher.has_next_event());
+}
+
+#[test]
+fn test_exclude_new_hidden_dir() {
+    let tempdir = tempfile::tempdir().unwrap();
+
+    let mut watcher = Watcher::new(
+        tempdir.as_ref(),
+        WatcherOpts::new(Dotdir::Exclude, false),
+    )
+    .unwrap();
+
+    let dotdir = tempdir.as_ref().join(".dotdir");
+    fs::create_dir(&dotdir).unwrap();
+    assert_eq!(watcher.next().unwrap(), Event::Create(dotdir.to_owned()));
+
+    let file = dotdir.join(random_string(5));
+    File::create(&file).unwrap();
+    assert!(!watcher.has_next_event());
+}
+
+#[test]
+fn test_must_include_hidden_top_dir() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let top_dir = tempdir.as_ref().join(".dotdir");
+    fs::create_dir(&top_dir).unwrap();
+
+    let mut watcher = Watcher::new(
+        top_dir.as_ref(),
+        WatcherOpts::new(Dotdir::Exclude, false),
+    )
+    .unwrap();
+
+    let file = top_dir.join(random_string(5));
+    File::create(&file).unwrap();
+    assert_eq!(watcher.next().unwrap(), Event::Create(file));
+}

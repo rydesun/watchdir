@@ -25,7 +25,14 @@ fn main() {
     let now = time::Instant::now();
     let watcher = match Watcher::new(
         opts.dir.as_ref().unwrap(),
-        WatcherOpts::new(opts.include_hidden.into(), opts.modify_event),
+        WatcherOpts::new(
+            if opts.include_hidden {
+                watchdir::Dotdir::Include
+            } else {
+                watchdir::Dotdir::Exclude
+            },
+            opts.modify_event,
+        ),
     ) {
         Ok(watcher) => watcher,
         Err(e) => {
