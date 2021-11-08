@@ -35,7 +35,7 @@ pub struct Opts {
     pub debug: bool,
 
     /// Include extra events
-    #[clap(long, arg_enum, use_delimiter = true)]
+    #[clap(value_name = "EVENT_TYPE", long, arg_enum, use_delimiter = true)]
     pub extra_events: Vec<ExtraEvent>,
 
     /// Canonicalize paths
@@ -53,6 +53,10 @@ pub struct Opts {
     /// Generate completions for shell
     #[clap(value_name = "SHELL", long, arg_enum)]
     pub completion: Option<Shell>,
+
+    /// Throttle modify event for some milliseconds
+    #[clap(value_name = "TIME", long, default_value = "1000")]
+    pub throttle_modify: u64,
 }
 
 #[derive(ArgEnum)]

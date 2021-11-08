@@ -1,4 +1,5 @@
 mod cli;
+mod print;
 
 use std::{io::Write, path::Path, time};
 
@@ -11,7 +12,8 @@ use watchdir::{Event, Watcher, WatcherOpts};
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let opts = cli::parse();
 
     init_logger(opts.debug, match opts.color {
@@ -42,9 +44,11 @@ fn main() {
     };
     info!("Initialized successfully! Elapsed time: {:?}", now.elapsed());
 
+    let mut printer = print::Printer::new(opts.throttle_modify);
     let mut stdout = StandardStream::stdout((&opts.color).into());
     for event in watcher {
         print_event(
+            &mut printer,
             &mut stdout,
             &event,
             opts.dir.as_ref().unwrap(),
@@ -72,6 +76,7 @@ fn main() {
 }
 
 fn print_event(
+    printer: &mut print::Printer,
     stdout: &mut StandardStream,
     event: &Event,
     path_prefix: &Path,
@@ -104,9 +109,6 @@ fn print_event(
         Event::Noise => panic!("Noise should never leak"),
     };
 
-    write_color!(stdout, (color)[set_bold])?;
-    write!(stdout, "{:<12}", head)?;
-
     match event {
         Event::MoveFile(from, to) | Event::MoveDir(from, to) => {
             let from_rest = from.strip_prefix(path_prefix).unwrap();
@@ -117,6 +119,9 @@ fn print_event(
             let _to_rest_parent =
                 to_rest.parent().unwrap_or_else(|| Path::new("")).join("");
             let _to_rest_name = to_rest.file_name().unwrap();
+
+            write_color!(stdout, (color)[set_bold])?;
+            write!(stdout, "{:<12}", head)?;
 
             if need_prefix {
                 write_color!(stdout, [set_dimmed])?;
@@ -148,11 +153,20 @@ fn print_event(
             write!(stdout, "{}", path.to_string_lossy())?;
         }
         _ => {
+            if let Event::Modify(path) = event {
+                if !printer.should_print(path) {
+                    return Ok(());
+                }
+            }
+
             let path = path.unwrap();
             let path_rest = path.strip_prefix(path_prefix).unwrap();
             let _path_rest_parent =
                 path_rest.parent().unwrap_or_else(|| Path::new("")).join("");
             let _path_rest_name = path_rest.file_name().unwrap();
+
+            write_color!(stdout, (color)[set_bold])?;
+            write!(stdout, "{:<12}", head)?;
 
             if need_prefix {
                 write_color!(stdout, [set_dimmed])?;

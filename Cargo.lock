@@ -810,6 +810,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "588b2d10a336da58d877567cd8fb8a14b463e2104910f8132cd054b4b96e29ee"
+dependencies = [
+ "autocfg",
+ "num_cpus",
+ "pin-project-lite",
+ "tokio-macros",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "114383b041aa6212c579467afa0075fbbdd0718de036100bc0ba7961d8cb9095"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "tracing"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,6 +1011,7 @@ dependencies = [
  "tempfile",
  "termcolor",
  "time",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "walkdir",
