@@ -103,7 +103,8 @@ pub fn bench_program_init(c: &mut Criterion) {
                     .unwrap()
                     .unwrap()
                     .contains("Initialized"));
-                p.kill()
+                p.kill().unwrap();
+                p.wait().unwrap();
             })
         });
 
@@ -128,7 +129,30 @@ pub fn bench_program_init(c: &mut Criterion) {
                     .unwrap()
                     .unwrap()
                     .contains("Watches established"));
-                p.kill()
+                p.kill().unwrap();
+                p.wait().unwrap();
+            })
+        });
+
+        group.bench_function(BenchmarkId::new("fswatch", i), |b| {
+            b.iter(|| {
+                let mut p = std::process::Command::new("fswatch")
+                    .arg("--verbose")
+                    .arg("--recursive")
+                    .arg(top_dir_with_subdirs.path())
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .spawn()
+                    .unwrap();
+                let stderr =
+                    BufReader::new(p.stderr.as_mut().unwrap()).lines();
+                for line in stderr {
+                    if line.unwrap().contains("run: Number of records:") {
+                        break;
+                    }
+                }
+                p.kill().unwrap();
+                p.wait().unwrap();
             })
         });
     }
@@ -178,7 +202,8 @@ pub fn bench_program_watch_move_dir(c: &mut Criterion) {
                 fs::rename(&dest_tempdir, &from_tempdir).unwrap();
                 assert!(stdout.next().unwrap().unwrap().contains("Move "));
             });
-            p.kill().unwrap()
+            p.kill().unwrap();
+            p.wait().unwrap();
         });
 
         group.bench_function(BenchmarkId::new("inotifywait", i), |b| {
@@ -217,8 +242,11 @@ pub fn bench_program_watch_move_dir(c: &mut Criterion) {
                 assert!(stdout.next().unwrap().unwrap().contains("MOVED_TO"));
                 assert!(stdout.next().unwrap().unwrap().contains("MOVE_SELF"));
             });
-            p.kill().unwrap()
+            p.kill().unwrap();
+            p.wait().unwrap();
         });
+
+        // fswatch takes too much times, so there is no need to bench it.
     }
     group.finish()
 }
