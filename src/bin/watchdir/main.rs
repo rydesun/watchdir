@@ -145,7 +145,7 @@ fn print_event(
             write!(stdout, "{}", from_rest.to_string_lossy())?;
 
             write_color!(stdout, [set_dimmed])?;
-            write!(stdout, " -> ")?;
+            write!(stdout, " → ")?;
 
             if need_prefix {
                 write_color!(stdout, [set_dimmed])?;
