@@ -8,6 +8,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use async_stream::stream;
+use futures::{pin_mut, Stream, StreamExt};
 use snafu::Snafu;
 use tracing::warn;
 use walkdir::WalkDir;
@@ -112,7 +114,6 @@ impl Watcher {
         if fd < 0 {
             return Err(Error::InitInotify);
         }
-        let event_seq = inotify::EventSeq::new(fd);
 
         let mut watcher = Self {
             fd,
@@ -120,7 +121,7 @@ impl Watcher {
             top_wd: 0,
             top_dir: dir.to_owned(),
             path_tree: path_tree::Head::new(dir.to_owned()),
-            event_seq,
+            event_seq: inotify::EventSeq::new(fd),
             cached_inotify_event: None,
             cached_events: None,
         };
@@ -129,6 +130,72 @@ impl Watcher {
         }
 
         Ok(watcher)
+    }
+
+    pub fn stream(&mut self) -> impl Stream<Item = Event> + '_ {
+        stream! {
+            loop {
+                if let Some(cached_events) = &mut self.cached_events {
+                    while let Some(event) = cached_events.next() {
+                        yield event;
+                    }
+                }
+                let (inotify_event, event, wd) = loop {
+                    let inotify_event = match self.cached_inotify_event.take()
+                    {
+                        Some(e) => e,
+                        None => {
+                            let stream = self.event_seq.stream();
+                            pin_mut!(stream);
+                            stream.next().await.unwrap()
+                        }
+                    };
+                    let (event, wd) = self.recognize(&inotify_event).await;
+                    if event != Event::Noise {
+                        break (inotify_event, event, wd);
+                    }
+                };
+
+                match event {
+                    Event::MoveDir(_, ref path) => {
+                        self.update_path(wd.unwrap(), path);
+                    }
+                    Event::MoveAwayDir(_) | Event::DeleteDir(_) => {
+                        self.rm_watch_all(wd.unwrap());
+                    }
+                    Event::MoveInto(ref path) => {
+                        if let Ok(metadata) = fs::symlink_metadata(path) {
+                            if guard(self.opts, path, metadata.file_type()) {
+                                self.add_watch_all(path);
+                            }
+                        }
+                    }
+                    Event::Create(ref path) => {
+                        if let Ok(metadata) = fs::symlink_metadata(path) {
+                            if guard(self.opts, path, metadata.file_type()) {
+                                self.cached_events = Some(Box::new(
+                                    self.add_watch_all(path)
+                                        .1
+                                        .into_iter()
+                                        .map(Event::Create),
+                                ));
+                            }
+                        }
+                    }
+                    Event::DeleteTop(_) | Event::UnmountTop(_) => {
+                        let top_wd = self.top_wd;
+                        self.rm_watch_all(top_wd);
+                    }
+                    Event::Unmount(_) => {
+                        self.rm_watch_all(inotify_event.wd);
+                    }
+
+                    _ => {}
+                }
+
+                yield event
+            }
+        }
     }
 
     fn add_watch(&mut self, path: &Path) -> Result<i32> {
@@ -200,9 +267,11 @@ impl Watcher {
         }
     }
 
-    fn next_inotify_event(&mut self) -> Option<inotify::Event> {
+    async fn next_inotify_event(&mut self) -> Option<inotify::Event> {
         if self.event_seq.has_next_event() {
-            Some(self.event_seq.next().unwrap())
+            let stream = self.event_seq.stream();
+            pin_mut!(stream);
+            Some(stream.next().await.unwrap())
         } else {
             None
         }
@@ -214,7 +283,7 @@ impl Watcher {
             | self.event_seq.has_next_event()
     }
 
-    fn recognize(
+    async fn recognize(
         &mut self,
         inotify_event: &inotify::Event,
     ) -> (Event, Option<i32>) {
@@ -228,7 +297,9 @@ impl Watcher {
 
             inotify::EventKind::MoveFrom(from_path) => {
                 let full_from_path = self.full_path(wd, from_path);
-                if let Some(next_inotify_event) = self.next_inotify_event() {
+                if let Some(next_inotify_event) =
+                    self.next_inotify_event().await
+                {
                     match next_inotify_event.kind {
                         inotify::EventKind::MoveSelf => {
                             if next_inotify_event.wd != self.top_wd {
@@ -253,7 +324,7 @@ impl Watcher {
                                 let full_to_path = self
                                     .full_path(next_inotify_event.wd, to_path);
                                 if let Some(next2_inotify_event) =
-                                    self.next_inotify_event()
+                                    self.next_inotify_event().await
                                 {
                                     match next2_inotify_event.kind {
                                         inotify::EventKind::MoveSelf => (
@@ -304,7 +375,9 @@ impl Watcher {
 
             inotify::EventKind::Delete(path) => {
                 let full_path = self.full_path(wd, path);
-                if let Some(next_inotify_event) = self.next_inotify_event() {
+                if let Some(next_inotify_event) =
+                    self.next_inotify_event().await
+                {
                     match next_inotify_event.kind {
                         inotify::EventKind::DeleteSelf => {
                             if next_inotify_event.wd == self.top_wd {
@@ -406,67 +479,6 @@ impl Watcher {
             inotify::EventKind::Ignored => (Event::Ignored, None),
             inotify::EventKind::Unknown => (Event::Unknown, None),
         }
-    }
-}
-
-impl Iterator for Watcher {
-    type Item = Event;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(cached_events) = &mut self.cached_events {
-            if let Some(event) = cached_events.next() {
-                return Some(event);
-            }
-        }
-
-        let (inotify_event, event, wd) = loop {
-            let inotify_event = self
-                .cached_inotify_event
-                .take()
-                .unwrap_or_else(|| self.event_seq.next().unwrap());
-            let (event, wd) = self.recognize(&inotify_event);
-            if event != Event::Noise {
-                break (inotify_event, event, wd);
-            }
-        };
-
-        match event {
-            Event::MoveDir(_, ref path) => {
-                self.update_path(wd.unwrap(), path);
-            }
-            Event::MoveAwayDir(_) | Event::DeleteDir(_) => {
-                self.rm_watch_all(wd.unwrap());
-            }
-            Event::MoveInto(ref path) => {
-                if let Ok(metadata) = fs::symlink_metadata(path) {
-                    if guard(self.opts, path, metadata.file_type()) {
-                        self.add_watch_all(path);
-                    }
-                }
-            }
-            Event::Create(ref path) => {
-                if let Ok(metadata) = fs::symlink_metadata(path) {
-                    if guard(self.opts, path, metadata.file_type()) {
-                        self.cached_events = Some(Box::new(
-                            self.add_watch_all(path)
-                                .1
-                                .into_iter()
-                                .map(Event::Create),
-                        ));
-                    }
-                }
-            }
-            Event::DeleteTop(_) | Event::UnmountTop(_) => {
-                self.rm_watch_all(self.top_wd);
-            }
-            Event::Unmount(_) => {
-                self.rm_watch_all(inotify_event.wd);
-            }
-
-            _ => {}
-        }
-
-        Some(event)
     }
 }
 

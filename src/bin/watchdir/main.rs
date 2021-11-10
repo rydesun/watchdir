@@ -3,6 +3,7 @@ mod print;
 
 use std::{io::Write, path::Path, time};
 
+use futures::{pin_mut, StreamExt};
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::{error, info, warn, Level};
@@ -25,7 +26,7 @@ async fn main() {
 
     info!("Initializing...");
     let now = time::Instant::now();
-    let watcher = match Watcher::new(
+    let mut watcher = match Watcher::new(
         opts.dir.as_ref().unwrap(),
         WatcherOpts::new(
             if opts.include_hidden {
@@ -46,7 +47,9 @@ async fn main() {
 
     let mut printer = print::Printer::new(opts.throttle_modify);
     let mut stdout = StandardStream::stdout((&opts.color).into());
-    for event in watcher {
+    let event_stream = watcher.stream();
+    pin_mut!(event_stream);
+    while let Some(event) = event_stream.next().await {
         print_event(
             &mut printer,
             &mut stdout,

@@ -1,12 +1,13 @@
 use std::{
     ffi::{CStr, OsStr},
-    fs::File,
-    io::Read,
     mem::size_of,
     os::unix::{ffi::OsStrExt, io::FromRawFd},
     path::PathBuf,
 };
 
+use async_stream::stream;
+use futures::Stream;
+use tokio::{fs::File, io::AsyncReadExt};
 use tracing::{debug, instrument};
 
 const MAX_FILENAME_LENGTH: usize = 255;
@@ -33,6 +34,24 @@ impl EventSeq {
             buffer: [0; MAX_INOTIFY_EVENT_SIZE],
             len: 0,
             offset: 0,
+        }
+    }
+
+    pub fn stream(&mut self) -> impl Stream<Item = Event> + '_ {
+        stream! {
+            loop {
+                if self.offset >= self.len {
+                    self.buffer.fill(0);
+                    self.offset = 0;
+                }
+                if self.offset == 0 {
+                        self.len = self.file.read(&mut self.buffer).await.unwrap();
+                }
+
+                let event = self.parse();
+                self.offset += INOTIFY_EVENT_HEADER_SIZE + event.len as usize;
+                yield event
+            }
         }
     }
 
@@ -113,24 +132,6 @@ impl EventSeq {
             debug!("{}", "Buffer has content");
             true
         }
-    }
-}
-
-impl Iterator for EventSeq {
-    type Item = Event;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.offset >= self.len {
-            self.buffer.fill(0);
-            self.offset = 0;
-        }
-        if self.offset == 0 {
-            self.len = self.file.read(&mut self.buffer).unwrap();
-        }
-
-        let event = self.parse();
-        self.offset += INOTIFY_EVENT_HEADER_SIZE + event.len as usize;
-        Some(event)
     }
 }
 
