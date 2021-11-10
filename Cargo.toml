@@ -29,7 +29,7 @@ walkdir = "2"
 
 [dependencies.tokio]
 version = "1.13"
-features = ["fs", "macros", "io-util", "rt-multi-thread", "time"]
+features = ["fs", "macros", "io-util", "sync", "rt-multi-thread", "time"]
 
 [build-dependencies]
 time = "0.3"

@@ -6,6 +6,7 @@ use std::{io::Write, path::Path, time};
 use futures::{pin_mut, StreamExt};
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use tokio::sync::mpsc;
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
 use watchdir::{Event, Watcher, WatcherOpts};
@@ -47,9 +48,18 @@ async fn main() {
 
     let mut printer = print::Printer::new(opts.throttle_modify);
     let mut stdout = StandardStream::stdout((&opts.color).into());
-    let event_stream = watcher.stream();
-    pin_mut!(event_stream);
-    while let Some(event) = event_stream.next().await {
+
+    let (tx, mut rx) = mpsc::channel(32);
+    tokio::spawn(async move {
+        let event_stream = watcher.stream();
+        pin_mut!(event_stream);
+        while let Some(event) = event_stream.next().await {
+            tx.send(event).await.unwrap();
+        }
+    });
+
+    loop {
+        let event = rx.recv().await.unwrap();
         print_event(
             &mut printer,
             &mut stdout,

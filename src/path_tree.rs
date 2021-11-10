@@ -1,9 +1,8 @@
 use std::{
-    cell::RefCell,
     collections::HashMap,
     ffi::OsString,
     path::{Path, PathBuf},
-    rc::{Rc, Weak},
+    sync::{Arc, Mutex, Weak},
 };
 
 use ahash::AHashMap;
@@ -31,8 +30,8 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct Head<T> {
     prefix: PathBuf,
-    table: AHashMap<T, Rc<RefCell<Node<T>>>>,
-    tree: Option<Rc<RefCell<Node<T>>>>,
+    table: AHashMap<T, Arc<Mutex<Node<T>>>>,
+    tree: Option<Arc<Mutex<Node<T>>>>,
 }
 
 impl<T> Head<T>
@@ -48,14 +47,14 @@ where
             .strip_prefix(&self.prefix)
             .context(PrefixMismatched { path })?;
         let new_node = match &self.tree {
-            Some(node) => Node::insert(Rc::clone(node), path_rest, value)?,
+            Some(node) => Node::insert(Arc::clone(node), path_rest, value)?,
             None => {
-                let node = Rc::new(RefCell::new(Node::new(
+                let node = Arc::new(Mutex::new(Node::new(
                     path.as_os_str().to_owned(),
                     value,
                     None,
                 )));
-                self.tree = Some(Rc::clone(&node));
+                self.tree = Some(Arc::clone(&node));
                 node
             }
         };
@@ -65,16 +64,19 @@ where
 
     pub fn delete(&mut self, value: T) -> Result<Vec<T>> {
         let node = self.table.get(&value).context(ValueNotFound)?;
-        let path = node.borrow().path();
+        let path = node.lock().unwrap().path();
         let path_rest = path
             .strip_prefix(&self.prefix)
             .context(PrefixMismatched { path: path.to_owned() })?;
         let values = {
             if path_rest.as_os_str().is_empty() {
-                self.tree.take().unwrap().borrow().values()
+                self.tree.take().unwrap().lock().unwrap().values()
             } else {
                 let tree = self.tree.as_ref().context(EmptyTree)?;
-                Node::pop(Rc::clone(tree), path_rest)?.borrow().values()
+                Node::pop(Arc::clone(tree), path_rest)?
+                    .lock()
+                    .unwrap()
+                    .values()
             }
         };
         for v in &values {
@@ -85,7 +87,7 @@ where
 
     pub fn rename(&self, value: T, new_path: &Path) -> Result<()> {
         let node = self.table.get(&value).context(ValueNotFound)?;
-        let old_path = node.borrow().path();
+        let old_path = node.lock().unwrap().path();
         let old_path_rest = old_path
             .strip_prefix(&self.prefix)
             .context(PrefixMismatched { path: old_path.to_owned() })?;
@@ -93,11 +95,11 @@ where
             .strip_prefix(&self.prefix)
             .context(PrefixMismatched { path: new_path })?;
         let tree = self.tree.as_ref().context(EmptyTree)?;
-        Node::rename(Rc::clone(tree), old_path_rest, new_path_rest)
+        Node::rename(Arc::clone(tree), old_path_rest, new_path_rest)
     }
 
     pub fn path(&self, value: T) -> PathBuf {
-        self.table[&value].borrow().path()
+        self.table[&value].lock().unwrap().path()
     }
 
     pub fn values(&self) -> impl Iterator<Item = &T> {
@@ -108,8 +110,8 @@ where
 pub struct Node<T> {
     key: OsString,
     value: T,
-    parent: Weak<RefCell<Node<T>>>,
-    children: HashMap<OsString, Rc<RefCell<Node<T>>>>,
+    parent: Weak<Mutex<Node<T>>>,
+    children: HashMap<OsString, Arc<Mutex<Node<T>>>>,
 }
 
 impl<T> Node<T>
@@ -119,70 +121,68 @@ where
     fn new(
         key: OsString,
         value: T,
-        parent: Option<&Rc<RefCell<Node<T>>>>,
+        parent: Option<&Arc<Mutex<Node<T>>>>,
     ) -> Self {
         Self {
             key,
             value,
             parent: match parent {
-                Some(node) => Rc::downgrade(node),
+                Some(node) => Arc::downgrade(node),
                 None => Weak::new(),
             },
             children: HashMap::new(),
         }
     }
 
-    fn get(
-        self_: Rc<RefCell<Self>>,
-        path: &Path,
-    ) -> Option<Rc<RefCell<Self>>> {
+    fn get(self_: Arc<Mutex<Self>>, path: &Path) -> Option<Arc<Mutex<Self>>> {
         let mut path = path.components();
         path.try_fold(self_, |acc, i| {
-            let acc = acc.borrow();
-            acc.children.get(i.as_os_str()).map(Rc::clone)
+            let acc = acc.lock().unwrap();
+            acc.children.get(i.as_os_str()).map(Arc::clone)
         })
     }
 
     fn insert(
-        self_: Rc<RefCell<Self>>,
+        self_: Arc<Mutex<Self>>,
         path: &Path,
         value: T,
-    ) -> Result<Rc<RefCell<Node<T>>>> {
+    ) -> Result<Arc<Mutex<Node<T>>>> {
         let parent = {
             let p = path.parent().context(InvalidPath { path })?;
             Self::get(self_, p).context(PathNotFound { path })?
         };
         let key = path.file_name().context(InvalidPath { path })?;
-        let node = Rc::new(RefCell::new(Self::new(
+        let node = Arc::new(Mutex::new(Self::new(
             key.to_owned(),
             value,
             Some(&parent),
         )));
 
-        parent.borrow_mut().children.insert(key.to_owned(), Rc::clone(&node));
+        parent
+            .lock()
+            .unwrap()
+            .children
+            .insert(key.to_owned(), Arc::clone(&node));
 
         Ok(node)
     }
 
-    fn pop(
-        self_: Rc<RefCell<Self>>,
-        path: &Path,
-    ) -> Result<Rc<RefCell<Self>>> {
+    fn pop(self_: Arc<Mutex<Self>>, path: &Path) -> Result<Arc<Mutex<Self>>> {
         let name = path.file_name().context(InvalidPath { path })?;
         let parent = {
             let p = path.parent().context(InvalidPath { path })?;
             Self::get(self_, p).context(PathNotFound { path })?
         };
-        let mut p = parent.borrow_mut();
+        let mut p = parent.lock().unwrap();
         p.children.remove(name).context(PathNotFound { path })
     }
 
     fn rename(
-        self_: Rc<RefCell<Self>>,
+        self_: Arc<Mutex<Self>>,
         old_path: &Path,
         new_path: &Path,
     ) -> Result<()> {
-        let node = Self::pop(Rc::clone(&self_), old_path)?;
+        let node = Self::pop(Arc::clone(&self_), old_path)?;
         let parent = {
             let p =
                 new_path.parent().context(InvalidPath { path: new_path })?;
@@ -191,22 +191,22 @@ where
 
         let new_name =
             new_path.file_name().context(InvalidPath { path: new_path })?;
-        node.borrow_mut().key = new_name.to_owned();
-        node.borrow_mut().parent = Rc::downgrade(&parent);
-        parent.borrow_mut().children.insert(new_name.to_owned(), node);
+        node.lock().unwrap().key = new_name.to_owned();
+        node.lock().unwrap().parent = Arc::downgrade(&parent);
+        parent.lock().unwrap().children.insert(new_name.to_owned(), node);
         Ok(())
     }
 
     fn values(&self) -> Vec<T> {
         let mut values = vec![self.value];
-        let mut stack: Vec<Rc<RefCell<Node<T>>>> =
-            self.children.values().map(Rc::clone).collect();
+        let mut stack: Vec<Arc<Mutex<Node<T>>>> =
+            self.children.values().map(Arc::clone).collect();
 
         while let Some(node) = stack.pop() {
-            let node = node.borrow();
+            let node = node.lock().unwrap();
             values.push(node.value);
             for c in node.children.values() {
-                stack.push(Rc::clone(c));
+                stack.push(Arc::clone(c));
             }
         }
         values
@@ -218,8 +218,8 @@ where
 
         let mut cur = self.parent.upgrade();
         while let Some(node) = cur {
-            temp.push(node.borrow().key.to_owned());
-            cur = node.borrow_mut().parent.upgrade();
+            temp.push(node.lock().unwrap().key.to_owned());
+            cur = node.lock().unwrap().parent.upgrade();
         }
         for i in temp.iter().rev() {
             path.push(i);

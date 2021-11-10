@@ -71,7 +71,6 @@ pub struct Watcher {
     path_tree: path_tree::Head<i32>,
     event_seq: inotify::EventSeq,
     cached_inotify_event: Option<inotify::Event>,
-    cached_events: Option<Box<dyn Iterator<Item = Event>>>,
 }
 
 #[derive(Copy, Clone)]
@@ -123,7 +122,6 @@ impl Watcher {
             path_tree: path_tree::Head::new(dir.to_owned()),
             event_seq: inotify::EventSeq::new(fd),
             cached_inotify_event: None,
-            cached_events: None,
         };
         if let (Some(top_wd), _) = watcher.add_watch_all(dir) {
             watcher.top_wd = top_wd;
@@ -135,11 +133,6 @@ impl Watcher {
     pub fn stream(&mut self) -> impl Stream<Item = Event> + '_ {
         stream! {
             loop {
-                if let Some(cached_events) = &mut self.cached_events {
-                    while let Some(event) = cached_events.next() {
-                        yield event;
-                    }
-                }
                 let (inotify_event, event, wd) = loop {
                     let inotify_event = match self.cached_inotify_event.take()
                     {
@@ -159,9 +152,11 @@ impl Watcher {
                 match event {
                     Event::MoveDir(_, ref path) => {
                         self.update_path(wd.unwrap(), path);
+                        yield event
                     }
                     Event::MoveAwayDir(_) | Event::DeleteDir(_) => {
                         self.rm_watch_all(wd.unwrap());
+                        yield event
                     }
                     Event::MoveInto(ref path) => {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
@@ -169,31 +164,42 @@ impl Watcher {
                                 self.add_watch_all(path);
                             }
                         }
+                        yield event
                     }
                     Event::Create(ref path) => {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
                             if guard(self.opts, path, metadata.file_type()) {
-                                self.cached_events = Some(Box::new(
-                                    self.add_watch_all(path)
-                                        .1
-                                        .into_iter()
-                                        .map(Event::Create),
-                                ));
+                                let next_events = self
+                                    .add_watch_all(path)
+                                    .1
+                                    .into_iter()
+                                    .map(Event::Create);
+
+                                yield event;
+                                for event in next_events {
+                                    yield event
+                                }
+                            } else {
+                                yield event
                             }
+                        } else {
+                            yield event
                         }
                     }
                     Event::DeleteTop(_) | Event::UnmountTop(_) => {
                         let top_wd = self.top_wd;
                         self.rm_watch_all(top_wd);
+                        yield event
                     }
                     Event::Unmount(_) => {
                         self.rm_watch_all(inotify_event.wd);
+                        yield event
                     }
 
-                    _ => {}
+                    _ => {
+                        yield event
+                    }
                 }
-
-                yield event
             }
         }
     }
@@ -278,9 +284,7 @@ impl Watcher {
     }
 
     pub fn has_next_event(&mut self) -> bool {
-        self.cached_inotify_event.is_some()
-            | self.cached_events.is_some()
-            | self.event_seq.has_next_event()
+        self.cached_inotify_event.is_some() | self.event_seq.has_next_event()
     }
 
     async fn recognize(
