@@ -1,11 +1,12 @@
 mod cli;
 mod print;
+mod theme;
 
-use std::{io::Write, path::Path, time};
+use std::time;
 
 use futures::{pin_mut, StreamExt};
 use mimalloc::MiMalloc;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, StandardStream};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
@@ -23,8 +24,8 @@ async fn main() {
         cli::ColorWhen::Auto => isatty_stderr(),
         cli::ColorWhen::Never => false,
     });
-    info!("version: {}", *cli::VERSION);
 
+    info!("version: {}", *cli::VERSION);
     info!("Initializing...");
     let now = time::Instant::now();
     let mut watcher = match Watcher::new(
@@ -46,9 +47,6 @@ async fn main() {
     };
     info!("Initialized successfully! Elapsed time: {:?}", now.elapsed());
 
-    let mut printer = print::Printer::new(opts.throttle_modify);
-    let mut stdout = StandardStream::stdout((&opts.color).into());
-
     let (tx, mut rx) = mpsc::channel(32);
     tokio::spawn(async move {
         let event_stream = watcher.stream();
@@ -58,16 +56,17 @@ async fn main() {
         }
     });
 
+    let mut printer = print::Printer::new(
+        StandardStream::stdout((&opts.color).into()),
+        theme::Theme {},
+        opts.dir.unwrap().to_owned(),
+        opts.prefix,
+        opts.throttle_modify,
+    );
+
     loop {
         let event = rx.recv().await.unwrap();
-        print_event(
-            &mut printer,
-            &mut stdout,
-            &event,
-            opts.dir.as_ref().unwrap(),
-            opts.prefix,
-        )
-        .unwrap();
+        printer.print(&event).unwrap();
         match event {
             Event::MoveTop(_) => {
                 warn!(
@@ -83,117 +82,15 @@ async fn main() {
                 warn!("Watched dir was unmounted.");
                 std::process::exit(0);
             }
+            Event::Unknown => {
+                error!("Unknown event occurs.");
+            }
+            Event::Noise => {
+                error!("Noise event should never leak.");
+            }
             _ => {}
         }
     }
-}
-
-fn print_event(
-    printer: &mut print::Printer,
-    stdout: &mut StandardStream,
-    event: &Event,
-    path_prefix: &Path,
-    need_prefix: bool,
-) -> Result<(), std::io::Error> {
-    let (head, path, color) = match event {
-        Event::Create(path) => ("Create", Some(path), Color::Green),
-        Event::DeleteDir(path) => ("Delete", Some(path), Color::Magenta),
-        Event::DeleteFile(path) => ("Delete", Some(path), Color::Magenta),
-        Event::MoveDir(..) => ("Move", None, Color::Blue),
-        Event::MoveFile(..) => ("Move", None, Color::Blue),
-        Event::MoveAwayDir(path) => ("MoveAway", Some(path), Color::Blue),
-        Event::MoveAwayFile(path) => ("MoveAway", Some(path), Color::Blue),
-        Event::MoveInto(path) => ("MoveInto", Some(path), Color::Blue),
-        Event::Modify(path) => ("Modify", Some(path), Color::Yellow),
-        Event::Open(path) => ("Open", Some(path), Color::Cyan),
-        Event::OpenTop(_) => ("Open", None, Color::Cyan),
-        Event::Close(path) => ("Close", Some(path), Color::Cyan),
-        Event::CloseTop(_) => ("Close", None, Color::Cyan),
-        Event::Access(path) => ("Access", Some(path), Color::Cyan),
-        Event::AccessTop(_) => ("Access", None, Color::Cyan),
-        Event::Attrib(path) => ("Attrib", Some(path), Color::Yellow),
-        Event::AttribTop(_) => ("Attrib", None, Color::Yellow),
-        Event::MoveTop(path) => ("MoveTop", Some(path), Color::Red),
-        Event::DeleteTop(path) => ("DeleteTop", Some(path), Color::Red),
-        Event::Unmount(path) => ("Unmount", Some(path), Color::Magenta),
-        Event::UnmountTop(path) => ("UnmountTop", Some(path), Color::Red),
-        Event::Unknown => ("Unknown", None, Color::Red),
-        Event::Ignored => return Ok(()),
-        Event::Noise => panic!("Noise should never leak"),
-    };
-
-    match event {
-        Event::MoveFile(from, to) | Event::MoveDir(from, to) => {
-            let from_rest = from.strip_prefix(path_prefix).unwrap();
-            let _from_rest_parent =
-                from_rest.parent().unwrap_or_else(|| Path::new("")).join("");
-            let _from_rest_name = from_rest.file_name().unwrap();
-            let to_rest = to.strip_prefix(path_prefix).unwrap();
-            let _to_rest_parent =
-                to_rest.parent().unwrap_or_else(|| Path::new("")).join("");
-            let _to_rest_name = to_rest.file_name().unwrap();
-
-            write_color!(stdout, (color)[set_bold])?;
-            write!(stdout, "{:<12}", head)?;
-
-            if need_prefix {
-                write_color!(stdout, [set_dimmed])?;
-                write!(stdout, "{}", path_prefix.to_string_lossy())?;
-            }
-
-            write_color!(stdout, (color)[set_bold])?;
-            write!(stdout, "{}", from_rest.to_string_lossy())?;
-
-            write_color!(stdout, [set_dimmed])?;
-            write!(stdout, " → ")?;
-
-            if need_prefix {
-                write_color!(stdout, [set_dimmed])?;
-                write!(stdout, "{}", path_prefix.to_string_lossy())?;
-            }
-
-            write_color!(stdout, (color)[set_bold])?;
-            write!(stdout, "{}", to_rest.to_string_lossy())?;
-        }
-        Event::MoveTop(path)
-        | Event::DeleteTop(path)
-        | Event::UnmountTop(path)
-        | Event::AccessTop(path)
-        | Event::AttribTop(path)
-        | Event::OpenTop(path)
-        | Event::CloseTop(path) => {
-            write_color!(stdout, reset)?;
-            write!(stdout, "{}", path.to_string_lossy())?;
-        }
-        _ => {
-            if let Event::Modify(path) = event {
-                if !printer.should_print(path) {
-                    return Ok(());
-                }
-            }
-
-            let path = path.unwrap();
-            let path_rest = path.strip_prefix(path_prefix).unwrap();
-            let _path_rest_parent =
-                path_rest.parent().unwrap_or_else(|| Path::new("")).join("");
-            let _path_rest_name = path_rest.file_name().unwrap();
-
-            write_color!(stdout, (color)[set_bold])?;
-            write!(stdout, "{:<12}", head)?;
-
-            if need_prefix {
-                write_color!(stdout, [set_dimmed])?;
-                write!(stdout, "{}", path_prefix.to_string_lossy())?;
-            }
-
-            write_color!(stdout, (color)[set_bold])?;
-            write!(stdout, "{}", path_rest.to_string_lossy())?;
-        }
-    }
-
-    write_color!(stdout, reset)?;
-    writeln!(stdout)?;
-    Ok(())
 }
 
 fn init_logger(debug: bool, color: bool) {
@@ -244,28 +141,4 @@ impl From<&cli::ColorWhen> for ColorChoice {
             cli::ColorWhen::Never => ColorChoice::Never,
         }
     }
-}
-
-#[macro_export]
-macro_rules! write_color {
-    ( $writer:expr, reset ) => {
-        $writer.set_color(&ColorSpec::new())
-    };
-
-    (
-        $writer:expr,
-        $( (
-            $( $fg:expr )? $( ,$bg:expr )?
-        ) )?
-        [
-            $( $effect:ident ),*
-        ]
-    ) => {
-        $writer.set_color(ColorSpec::new()
-            $(
-                $(.set_fg(Some($fg)))?
-                $(.set_bg(Some($bg)))?
-            )?
-            $(.$effect(true))*)
-    };
 }
