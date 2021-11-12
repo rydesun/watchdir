@@ -36,6 +36,7 @@ pub struct Printer {
     stdout: StandardStream,
     theme: Theme,
     top_dir: PathBuf,
+    need_time: bool,
     need_prefix: bool,
     timeout_modify: Duration,
     counter: Arc<Mutex<HashSet<PathBuf>>>,
@@ -46,6 +47,7 @@ impl<'a> Printer {
         stdout: StandardStream,
         theme: Theme,
         top_dir: PathBuf,
+        need_time: bool,
         need_prefix: bool,
         timeout_modify: u64,
     ) -> Self {
@@ -53,6 +55,7 @@ impl<'a> Printer {
             stdout,
             theme,
             top_dir,
+            need_time,
             need_prefix,
             timeout_modify: Duration::from_millis(timeout_modify),
             counter: Arc::new(Mutex::new(HashSet::new())),
@@ -66,16 +69,18 @@ impl<'a> Printer {
     ) -> Result<(), std::io::Error> {
         let (head, color) = self.theme.head_and_color(event);
 
-        write_color!(self.stdout, [set_dimmed])?;
-        write!(
-            self.stdout,
-            "{}  ",
-            t.format(&time::macros::format_description!(
-                "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond \
-                 digits:6]Z"
-            ))
-            .unwrap(),
-        )?;
+        if self.need_time {
+            write_color!(self.stdout, [set_dimmed])?;
+            write!(
+                self.stdout,
+                "{}  ",
+                t.format(&time::macros::format_description!(
+                    "[year]-[month]-[day]T[hour]:[minute]:[second].\
+                     [subsecond digits:6]Z"
+                ))
+                .unwrap(),
+            )?;
+        }
 
         match event {
             Event::CreateDir(path)

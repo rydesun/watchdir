@@ -60,6 +60,7 @@ async fn main() {
         StandardStream::stdout((&opts.color).into()),
         theme::Theme {},
         opts.dir.unwrap().to_owned(),
+        opts.time,
         opts.prefix,
         opts.throttle_modify,
     );
