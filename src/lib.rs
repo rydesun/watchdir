@@ -260,7 +260,7 @@ impl Watcher {
                     false
                 }
             })
-            .filter_map(|entry| Result::ok(entry))
+            .filter_map(Result::ok)
             .map(|entry| entry.path().to_owned())
             .collect();
 
