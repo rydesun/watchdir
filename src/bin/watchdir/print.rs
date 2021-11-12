@@ -62,17 +62,23 @@ impl<'a> Printer {
     pub fn print(&mut self, event: &Event) -> Result<(), std::io::Error> {
         let (head, color) = self.theme.head_and_color(event);
         match event {
-            Event::Create(path)
+            Event::CreateDir(path)
+            | Event::CreateFile(path)
             | Event::DeleteDir(path)
             | Event::DeleteFile(path)
-            | Event::MoveAwayDir(path)
-            | Event::MoveAwayFile(path)
-            | Event::MoveInto(path)
+            | Event::MoveDirAway(path)
+            | Event::MoveFileAway(path)
+            | Event::MoveDirInto(path)
+            | Event::MoveFileInto(path)
             | Event::Modify(path)
-            | Event::Open(path)
-            | Event::Close(path)
-            | Event::Access(path)
-            | Event::Attrib(path)
+            | Event::OpenDir(path)
+            | Event::OpenFile(path)
+            | Event::CloseDir(path)
+            | Event::CloseFile(path)
+            | Event::AccessDir(path)
+            | Event::AccessFile(path)
+            | Event::AttribDir(path)
+            | Event::AttribFile(path)
             | Event::Unmount(path) => {
                 if let Event::Modify(path) = event {
                     if !self.should(path) {

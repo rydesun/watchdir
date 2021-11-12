@@ -87,20 +87,32 @@ impl EventSeq {
             None
         };
 
+        let file_type = if raw_event.mask & libc::IN_ISDIR > 0 {
+            FileType::Dir
+        } else {
+            FileType::File
+        };
+
         let kind = match raw_event.mask {
             i if i & libc::IN_MOVED_FROM > 0 => {
-                EventKind::MoveFrom(path.unwrap())
+                EventKind::MoveFrom(path.unwrap(), file_type)
             }
-            i if i & libc::IN_MOVED_TO > 0 => EventKind::MoveTo(path.unwrap()),
-            i if i & libc::IN_CREATE > 0 => EventKind::Create(path.unwrap()),
+            i if i & libc::IN_MOVED_TO > 0 => {
+                EventKind::MoveTo(path.unwrap(), file_type)
+            }
+            i if i & libc::IN_CREATE > 0 => {
+                EventKind::Create(path.unwrap(), file_type)
+            }
             i if i & libc::IN_MOVE_SELF > 0 => EventKind::MoveSelf,
-            i if i & libc::IN_DELETE > 0 => EventKind::Delete(path.unwrap()),
+            i if i & libc::IN_DELETE > 0 => {
+                EventKind::Delete(path.unwrap(), file_type)
+            }
             i if i & libc::IN_DELETE_SELF > 0 => EventKind::DeleteSelf,
             i if i & libc::IN_MODIFY > 0 => EventKind::Modify(path.unwrap()),
-            i if i & libc::IN_ATTRIB > 0 => EventKind::Attrib(path),
-            i if i & libc::IN_ACCESS > 0 => EventKind::Access(path),
-            i if i & libc::IN_OPEN > 0 => EventKind::Open(path),
-            i if i & libc::IN_CLOSE > 0 => EventKind::Close(path),
+            i if i & libc::IN_ATTRIB > 0 => EventKind::Attrib(path, file_type),
+            i if i & libc::IN_ACCESS > 0 => EventKind::Access(path, file_type),
+            i if i & libc::IN_OPEN > 0 => EventKind::Open(path, file_type),
+            i if i & libc::IN_CLOSE > 0 => EventKind::Close(path, file_type),
             i if i & libc::IN_UNMOUNT > 0 => EventKind::Unmount,
             i if i & libc::IN_IGNORED > 0 => EventKind::Ignored,
             _ => EventKind::Unknown,
@@ -145,18 +157,24 @@ pub struct Event {
 
 #[derive(Debug)]
 pub enum EventKind {
-    MoveTo(PathBuf),
-    MoveFrom(PathBuf),
+    MoveTo(PathBuf, FileType),
+    MoveFrom(PathBuf, FileType),
     MoveSelf,
-    Create(PathBuf),
-    Delete(PathBuf),
+    Create(PathBuf, FileType),
+    Delete(PathBuf, FileType),
     DeleteSelf,
     Modify(PathBuf),
-    Access(Option<PathBuf>),
-    Attrib(Option<PathBuf>),
-    Open(Option<PathBuf>),
-    Close(Option<PathBuf>),
+    Access(Option<PathBuf>, FileType),
+    Attrib(Option<PathBuf>, FileType),
+    Open(Option<PathBuf>, FileType),
+    Close(Option<PathBuf>, FileType),
     Unmount,
     Ignored,
     Unknown,
+}
+
+#[derive(Debug)]
+pub enum FileType {
+    Dir,
+    File,
 }

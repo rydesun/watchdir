@@ -16,24 +16,30 @@ use walkdir::WalkDir;
 
 #[derive(PartialEq, Debug)]
 pub enum Event {
-    Create(PathBuf),
+    CreateDir(PathBuf),
+    CreateFile(PathBuf),
     MoveDir(PathBuf, PathBuf),
     MoveFile(PathBuf, PathBuf),
-    MoveAwayDir(PathBuf),
-    MoveAwayFile(PathBuf),
-    MoveInto(PathBuf),
+    MoveDirAway(PathBuf),
+    MoveFileAway(PathBuf),
+    MoveDirInto(PathBuf),
+    MoveFileInto(PathBuf),
     MoveTop(PathBuf),
     DeleteDir(PathBuf),
     DeleteFile(PathBuf),
     DeleteTop(PathBuf),
     Modify(PathBuf),
-    Access(PathBuf),
+    AccessDir(PathBuf),
+    AccessFile(PathBuf),
     AccessTop(PathBuf),
-    Attrib(PathBuf),
+    AttribDir(PathBuf),
+    AttribFile(PathBuf),
     AttribTop(PathBuf),
-    Open(PathBuf),
+    OpenDir(PathBuf),
+    OpenFile(PathBuf),
     OpenTop(PathBuf),
-    Close(PathBuf),
+    CloseDir(PathBuf),
+    CloseFile(PathBuf),
     CloseTop(PathBuf),
     Unmount(PathBuf),
     UnmountTop(PathBuf),
@@ -154,11 +160,11 @@ impl Watcher {
                         self.update_path(wd.unwrap(), path);
                         yield event
                     }
-                    Event::MoveAwayDir(_) | Event::DeleteDir(_) => {
+                    Event::MoveDirAway(_) | Event::DeleteDir(_) => {
                         self.rm_watch_all(wd.unwrap());
                         yield event
                     }
-                    Event::MoveInto(ref path) => {
+                    Event::MoveDirInto(ref path) => {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
                             if guard(self.opts, path, metadata.file_type()) {
                                 self.add_watch_all(path);
@@ -166,14 +172,14 @@ impl Watcher {
                         }
                         yield event
                     }
-                    Event::Create(ref path) => {
+                    Event::CreateDir(ref path) => {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
                             if guard(self.opts, path, metadata.file_type()) {
                                 let next_events = self
                                     .add_watch_all(path)
                                     .1
                                     .into_iter()
-                                    .map(Event::Create);
+                                    .map(Event::CreateDir);
 
                                 yield event;
                                 for event in next_events {
@@ -303,12 +309,16 @@ impl Watcher {
         let wd = inotify_event.wd;
 
         match &inotify_event.kind {
-            inotify::EventKind::Create(path) => {
+            inotify::EventKind::Create(path, file_type) => {
                 let full_path = self.full_path(wd, path);
-                (Event::Create(full_path), None)
+                let event = match file_type {
+                    inotify::FileType::Dir => Event::CreateDir(full_path),
+                    inotify::FileType::File => Event::CreateFile(full_path),
+                };
+                (event, None)
             }
 
-            inotify::EventKind::MoveFrom(from_path) => {
+            inotify::EventKind::MoveFrom(from_path, _) => {
                 let full_from_path = self.full_path(wd, from_path);
                 if let Some(next_inotify_event) =
                     self.next_inotify_event().await
@@ -317,22 +327,22 @@ impl Watcher {
                         inotify::EventKind::MoveSelf => {
                             if next_inotify_event.wd != self.top_wd {
                                 (
-                                    Event::MoveAwayDir(full_from_path),
+                                    Event::MoveDirAway(full_from_path),
                                     Some(next_inotify_event.wd),
                                 )
                             } else {
                                 self.cached_inotify_event =
                                     Some(next_inotify_event);
-                                (Event::MoveAwayFile(full_from_path), None)
+                                (Event::MoveFileAway(full_from_path), None)
                             }
                         }
-                        inotify::EventKind::MoveTo(ref to_path) => {
+                        inotify::EventKind::MoveTo(ref to_path, _) => {
                             if inotify_event.cookie
                                 != next_inotify_event.cookie
                             {
                                 self.cached_inotify_event =
                                     Some(next_inotify_event);
-                                (Event::MoveAwayFile(full_from_path), None)
+                                (Event::MoveFileAway(full_from_path), None)
                             } else {
                                 let full_to_path = self
                                     .full_path(next_inotify_event.wd, to_path);
@@ -373,20 +383,24 @@ impl Watcher {
                         _ => {
                             self.cached_inotify_event =
                                 Some(next_inotify_event);
-                            (Event::MoveAwayFile(full_from_path), None)
+                            (Event::MoveFileAway(full_from_path), None)
                         }
                     }
                 } else {
-                    (Event::MoveAwayFile(full_from_path), None)
+                    (Event::MoveFileAway(full_from_path), None)
                 }
             }
 
-            inotify::EventKind::MoveTo(path) => {
+            inotify::EventKind::MoveTo(path, file_type) => {
                 let full_path = self.full_path(wd, path);
-                (Event::MoveInto(full_path), None)
+                let event = match file_type {
+                    inotify::FileType::Dir => Event::MoveDirInto(full_path),
+                    inotify::FileType::File => Event::MoveFileInto(full_path),
+                };
+                (event, None)
             }
 
-            inotify::EventKind::Delete(path) => {
+            inotify::EventKind::Delete(path, _) => {
                 let full_path = self.full_path(wd, path);
                 if let Some(next_inotify_event) =
                     self.next_inotify_event().await
@@ -427,10 +441,16 @@ impl Watcher {
                 let full_path = self.full_path(wd, path);
                 (Event::Modify(full_path), None)
             }
-            inotify::EventKind::Access(path) => match path {
+            inotify::EventKind::Access(path, file_type) => match path {
                 Some(path) => {
                     let full_path = self.full_path(wd, path);
-                    (Event::Access(full_path), None)
+                    let event = match file_type {
+                        inotify::FileType::Dir => Event::AccessDir(full_path),
+                        inotify::FileType::File => {
+                            Event::AccessFile(full_path)
+                        }
+                    };
+                    (event, None)
                 }
                 None => {
                     if wd == self.top_wd {
@@ -440,10 +460,16 @@ impl Watcher {
                     }
                 }
             },
-            inotify::EventKind::Attrib(path) => match path {
+            inotify::EventKind::Attrib(path, file_type) => match path {
                 Some(path) => {
                     let full_path = self.full_path(wd, path);
-                    (Event::Attrib(full_path), None)
+                    let event = match file_type {
+                        inotify::FileType::Dir => Event::AttribDir(full_path),
+                        inotify::FileType::File => {
+                            Event::AttribFile(full_path)
+                        }
+                    };
+                    (event, None)
                 }
                 None => {
                     if wd == self.top_wd {
@@ -453,10 +479,14 @@ impl Watcher {
                     }
                 }
             },
-            inotify::EventKind::Open(path) => match path {
+            inotify::EventKind::Open(path, file_type) => match path {
                 Some(path) => {
                     let full_path = self.full_path(wd, path);
-                    (Event::Open(full_path), None)
+                    let event = match file_type {
+                        inotify::FileType::Dir => Event::OpenDir(full_path),
+                        inotify::FileType::File => Event::OpenFile(full_path),
+                    };
+                    (event, None)
                 }
                 None => {
                     if wd == self.top_wd {
@@ -466,10 +496,14 @@ impl Watcher {
                     }
                 }
             },
-            inotify::EventKind::Close(path) => match path {
+            inotify::EventKind::Close(path, file_type) => match path {
                 Some(path) => {
                     let full_path = self.full_path(wd, path);
-                    (Event::Close(full_path), None)
+                    let event = match file_type {
+                        inotify::FileType::Dir => Event::CloseDir(full_path),
+                        inotify::FileType::File => Event::CloseFile(full_path),
+                    };
+                    (event, None)
                 }
                 None => {
                     if wd == self.top_wd {
