@@ -65,8 +65,8 @@ async fn main() {
     );
 
     loop {
-        let event = rx.recv().await.unwrap();
-        printer.print(&event).unwrap();
+        let (event, t) = rx.recv().await.unwrap();
+        printer.print(&event, t).unwrap();
         match event {
             Event::MoveTop(_) => {
                 warn!(

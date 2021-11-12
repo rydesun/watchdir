@@ -71,6 +71,8 @@ impl EventSeq {
             }
         }
 
+        let now = time::OffsetDateTime::now_utc();
+
         let path = if raw_event.len > 0 {
             let raw_path = unsafe {
                 CStr::from_bytes_with_nul_unchecked(
@@ -123,6 +125,7 @@ impl EventSeq {
             cookie: raw_event.cookie,
             len: raw_event.len,
             kind,
+            t: now,
         };
         debug!(?event);
 
@@ -152,6 +155,7 @@ pub struct Event {
     pub kind: EventKind,
     pub wd: i32,
     pub cookie: u32,
+    pub t: time::OffsetDateTime,
     len: u32,
 }
 

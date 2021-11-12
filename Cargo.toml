@@ -23,6 +23,7 @@ libc = "0.2"
 mimalloc = "0.1"
 snafu = "0.6"
 termcolor = "1.1"
+time = { version = "0.3", features = ["formatting", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"

@@ -59,8 +59,24 @@ impl<'a> Printer {
         }
     }
 
-    pub fn print(&mut self, event: &Event) -> Result<(), std::io::Error> {
+    pub fn print(
+        &mut self,
+        event: &Event,
+        t: time::OffsetDateTime,
+    ) -> Result<(), std::io::Error> {
         let (head, color) = self.theme.head_and_color(event);
+
+        write_color!(self.stdout, [set_dimmed])?;
+        write!(
+            self.stdout,
+            "{}  ",
+            t.format(&time::macros::format_description!(
+                "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond \
+                 digits:6]Z"
+            ))
+            .unwrap(),
+        )?;
+
         match event {
             Event::CreateDir(path)
             | Event::CreateFile(path)

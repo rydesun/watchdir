@@ -136,7 +136,9 @@ impl Watcher {
         Ok(watcher)
     }
 
-    pub fn stream(&mut self) -> impl Stream<Item = Event> + '_ {
+    pub fn stream(
+        &mut self,
+    ) -> impl Stream<Item = (Event, time::OffsetDateTime)> + '_ {
         stream! {
             loop {
                 let (inotify_event, event, wd) = loop {
@@ -158,11 +160,11 @@ impl Watcher {
                 match event {
                     Event::MoveDir(_, ref path) => {
                         self.update_path(wd.unwrap(), path);
-                        yield event
+                        yield (event, inotify_event.t)
                     }
                     Event::MoveDirAway(_) | Event::DeleteDir(_) => {
                         self.rm_watch_all(wd.unwrap());
-                        yield event
+                        yield (event, inotify_event.t)
                     }
                     Event::MoveDirInto(ref path) => {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
@@ -170,7 +172,7 @@ impl Watcher {
                                 self.add_watch_all(path);
                             }
                         }
-                        yield event
+                        yield (event, inotify_event.t)
                     }
                     Event::CreateDir(ref path) => {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
@@ -181,29 +183,29 @@ impl Watcher {
                                     .into_iter()
                                     .map(Event::CreateDir);
 
-                                yield event;
+                                yield (event, inotify_event.t);
                                 for event in next_events {
-                                    yield event
+                                    yield (event, inotify_event.t)
                                 }
                             } else {
-                                yield event
+                                yield (event, inotify_event.t)
                             }
                         } else {
-                            yield event
+                            yield (event, inotify_event.t)
                         }
                     }
                     Event::DeleteTop(_) | Event::UnmountTop(_) => {
                         let top_wd = self.top_wd;
                         self.rm_watch_all(top_wd);
-                        yield event
+                        yield (event, inotify_event.t)
                     }
                     Event::Unmount(_) => {
                         self.rm_watch_all(inotify_event.wd);
-                        yield event
+                        yield (event, inotify_event.t)
                     }
 
                     _ => {
-                        yield event
+                        yield (event, inotify_event.t)
                     }
                 }
             }
