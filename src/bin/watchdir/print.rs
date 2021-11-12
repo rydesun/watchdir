@@ -67,6 +67,15 @@ impl<'a> Printer {
         event: &Event,
         t: time::OffsetDateTime,
     ) -> Result<(), std::io::Error> {
+        match event {
+            Event::Unknown | Event::Noise | Event::Ignored => return Ok(()),
+            Event::Modify(path) => {
+                if !self.should(path) {
+                    return Ok(());
+                }
+            }
+            _ => {}
+        }
         let (head, color) = self.theme.head_and_color(event);
 
         if self.need_time {
@@ -81,6 +90,9 @@ impl<'a> Printer {
                 .unwrap(),
             )?;
         }
+
+        write_color!(self.stdout, (color)[set_bold])?;
+        write!(self.stdout, "{:<12}", head)?;
 
         match event {
             Event::CreateDir(path)
@@ -101,16 +113,7 @@ impl<'a> Printer {
             | Event::AttribDir(path)
             | Event::AttribFile(path)
             | Event::Unmount(path) => {
-                if let Event::Modify(path) = event {
-                    if !self.should(path) {
-                        return Ok(());
-                    }
-                }
-
                 let stripped_path = self.strip(path);
-
-                write_color!(self.stdout, (color)[set_bold])?;
-                write!(self.stdout, "{:<12}", head)?;
 
                 if self.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;
@@ -119,17 +122,11 @@ impl<'a> Printer {
 
                 write_color!(self.stdout, (color)[set_bold])?;
                 write!(self.stdout, "{}", stripped_path.to_string_lossy())?;
-
-                write_color!(self.stdout, reset)?;
-                writeln!(self.stdout)?;
             }
             Event::MoveFile(from_path, to_path)
             | Event::MoveDir(from_path, to_path) => {
                 let stripped_from_path = self.strip(from_path);
                 let stripped_to_path = self.strip(to_path);
-
-                write_color!(self.stdout, (color)[set_bold])?;
-                write!(self.stdout, "{:<12}", head)?;
 
                 if self.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;
@@ -153,9 +150,6 @@ impl<'a> Printer {
 
                 write_color!(self.stdout, (color)[set_bold])?;
                 write!(self.stdout, "{}", stripped_to_path.to_string_lossy())?;
-
-                write_color!(self.stdout, reset)?;
-                writeln!(self.stdout)?;
             }
             Event::MoveTop(path)
             | Event::DeleteTop(path)
@@ -164,17 +158,14 @@ impl<'a> Printer {
             | Event::AttribTop(path)
             | Event::OpenTop(path)
             | Event::CloseTop(path) => {
-                write_color!(self.stdout, (color)[set_bold])?;
-                write!(self.stdout, "{:<12}", head)?;
-
                 write_color!(self.stdout, reset)?;
                 write!(self.stdout, "{}", path.to_string_lossy())?;
-
-                write_color!(self.stdout, reset)?;
-                writeln!(self.stdout)?;
             }
-            Event::Unknown | Event::Noise | Event::Ignored => {}
+            _ => {}
         }
+
+        write_color!(self.stdout, reset)?;
+        writeln!(self.stdout)?;
         Ok(())
     }
 
