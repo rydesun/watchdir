@@ -42,6 +42,10 @@ where
         Self { prefix, tree: None, table: AHashMap::new() }
     }
 
+    pub fn has(&self, value: T) -> bool {
+        self.table.contains_key(&value)
+    }
+
     pub fn insert(&mut self, path: &Path, value: T) -> Result<()> {
         let path_rest = path
             .strip_prefix(&self.prefix)

@@ -54,7 +54,7 @@ pub enum Error {
     #[snafu(display("Failed to use inotify API"))]
     InitInotify,
 
-    #[snafu(display("Failed to watch: {}: {}", path.display(), source))]
+    #[snafu(display("{}: {}", source, path.display()))]
     AddWatch { source: std::io::Error, path: PathBuf },
 
     #[snafu(display("Watch the same path multiple times: {}", path.display()))]
@@ -220,12 +220,16 @@ impl Watcher {
             });
         }
 
+        if self.path_tree.has(wd) {
+            return Err(Error::WatchSame { wd, path: path.to_owned() });
+        }
+
         self.path_tree.insert(path, wd).unwrap();
         Ok(wd)
     }
 
-    fn add_watch_all(&mut self, d: &Path) -> (Option<i32>, Vec<PathBuf>) {
-        let top_wd = match self.add_watch(d) {
+    fn add_watch_all(&mut self, path: &Path) -> (Option<i32>, Vec<PathBuf>) {
+        let top_wd = match self.add_watch(path) {
             Err(e) => {
                 warn!("{}", e);
                 None
@@ -233,21 +237,26 @@ impl Watcher {
             Ok(wd) => Some(wd),
         };
         let opts = self.opts;
-        let mut new_dirs = Vec::new();
-
-        WalkDir::new(d)
+        let new_dirs = WalkDir::new(path)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|e| guard(opts, e.path(), e.file_type()))
-            .filter_map(Result::ok)
-            .for_each(|e| {
-                let dir = e.path();
-                if let Err(e) = self.add_watch(dir) {
-                    warn!("{}", e);
+            .filter_entry(|entry| {
+                let path = entry.path();
+                if guard(opts, path, entry.file_type()) {
+                    match self.add_watch(path) {
+                        Err(e) => {
+                            warn!("{}", e);
+                            false
+                        }
+                        Ok(_) => true,
+                    }
                 } else {
-                    new_dirs.push(dir.to_owned());
+                    false
                 }
-            });
+            })
+            .filter_map(|entry| Result::ok(entry))
+            .map(|entry| entry.path().to_owned())
+            .collect();
 
         (top_wd, new_dirs)
     }
