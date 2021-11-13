@@ -2,8 +2,6 @@ mod cli;
 mod print;
 mod theme;
 
-use std::time;
-
 use futures::{pin_mut, StreamExt};
 use mimalloc::MiMalloc;
 use termcolor::{ColorChoice, StandardStream};
@@ -27,7 +25,7 @@ async fn main() {
 
     info!("version: {}", *cli::VERSION);
     info!("Initializing...");
-    let now = time::Instant::now();
+    let now = std::time::Instant::now();
     let mut watcher = match Watcher::new(
         opts.dir.as_ref().unwrap(),
         WatcherOpts::new(
@@ -95,9 +93,23 @@ async fn main() {
 }
 
 fn init_logger(debug: bool, color: bool) {
+    let time_format = time::macros::format_description!(
+        "[year]-[month]-[day]T[hour]:[minute]:\
+         [second]+[offset_hour][offset_minute]"
+    );
+
     let subscriber = tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_ansi(color);
+
+    #[cfg(unsound_local_offset)]
+    let subscriber = subscriber.with_timer(
+        tracing_subscriber::fmt::time::LocalTime::new(time_format),
+    );
+    #[cfg(not(unsound_local_offset))]
+    let subscriber = subscriber
+        .with_timer(tracing_subscriber::fmt::time::UtcTime::new(time_format));
+
     if debug {
         subscriber
             .with_env_filter(EnvFilter::new(Level::DEBUG.to_string()))

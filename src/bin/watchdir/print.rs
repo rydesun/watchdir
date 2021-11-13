@@ -40,6 +40,7 @@ pub struct Printer {
     need_prefix: bool,
     timeout_modify: Duration,
     counter: Arc<Mutex<HashSet<PathBuf>>>,
+    time_offset: Option<time::UtcOffset>,
 }
 
 impl<'a> Printer {
@@ -59,13 +60,18 @@ impl<'a> Printer {
             need_prefix,
             timeout_modify: Duration::from_millis(timeout_modify),
             counter: Arc::new(Mutex::new(HashSet::new())),
+            time_offset: if cfg!(unsound_local_offset) {
+                time::UtcOffset::current_local_offset().ok()
+            } else {
+                None
+            },
         }
     }
 
     pub fn print(
         &mut self,
         event: &Event,
-        t: time::OffsetDateTime,
+        mut t: time::OffsetDateTime,
     ) -> Result<(), std::io::Error> {
         match event {
             Event::Unknown | Event::Noise | Event::Ignored => return Ok(()),
@@ -79,13 +85,33 @@ impl<'a> Printer {
         let (head, color) = self.theme.head_and_color(event);
 
         if self.need_time {
+            if let Some(offset) = self.time_offset {
+                t = t.to_offset(offset);
+            }
             write_color!(self.stdout, [set_dimmed])?;
             write!(
                 self.stdout,
-                "{}  ",
+                "{}",
                 t.format(&time::macros::format_description!(
-                    "[year]-[month]-[day]T[hour]:[minute]:[second].\
-                     [subsecond digits:6]Z"
+                    "[year]-[month]-[day]T"
+                ))
+                .unwrap(),
+            )?;
+            write_color!(self.stdout, [set_bold])?;
+            write!(
+                self.stdout,
+                "{}",
+                t.format(&time::macros::format_description!(
+                    "[hour]:[minute]:[second]"
+                ))
+                .unwrap(),
+            )?;
+            write_color!(self.stdout, [set_dimmed])?;
+            write!(
+                self.stdout,
+                "{}",
+                t.format(&time::macros::format_description!(
+                    "+[offset_hour][offset_minute]  "
                 ))
                 .unwrap(),
             )?;
