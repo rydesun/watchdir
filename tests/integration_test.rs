@@ -24,7 +24,10 @@ async fn test_create_file() {
 
     let path = top_dir.path().join(random_string(5));
     File::create(&path).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(path))
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(path, FileType::File)
+    )
 }
 
 #[tokio::test]
@@ -42,12 +45,15 @@ async fn test_create_in_created_subdir() {
     fs::create_dir(&dir).unwrap();
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::CreateDir(dir.to_owned())
+        Event::Create(dir.to_owned(), FileType::Dir)
     );
 
     let path = dir.join(random_string(5));
     File::create(&path).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(path))
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(path, FileType::File)
+    )
 }
 
 #[tokio::test]
@@ -72,13 +78,16 @@ async fn test_create_in_recur_created_subdir() {
     for d in dirs.iter().take(recur_depth) {
         assert_eq!(
             stream.next().await.unwrap().0,
-            Event::CreateDir(d.to_owned())
+            Event::Create(d.to_owned(), FileType::Dir)
         );
     }
 
     let path = dir.join(random_string(5));
     File::create(&path).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(path))
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(path, FileType::File)
+    )
 }
 
 #[tokio::test]
@@ -100,7 +109,7 @@ async fn test_move_dir() {
 
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::MoveDir(old_dir, new_dir)
+        Event::Move(old_dir, new_dir, FileType::Dir)
     )
 }
 
@@ -123,7 +132,7 @@ async fn test_move_long_name_dir() {
 
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::MoveDir(old_dir, new_dir)
+        Event::Move(old_dir, new_dir, FileType::Dir)
     )
 }
 
@@ -172,12 +181,15 @@ async fn test_create_in_moved_subdir() {
     fs::rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::MoveDir(old_dir, new_dir.to_owned())
+        Event::Move(old_dir, new_dir.to_owned(), FileType::Dir)
     );
 
     let new_file = new_dir.join(sub_dirs).join(random_string(5));
     File::create(&new_file).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(new_file))
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(new_file, FileType::File)
+    )
 }
 
 #[tokio::test]
@@ -205,12 +217,15 @@ async fn test_create_in_moved_dir_in_subdir() {
     fs::rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::MoveDir(old_dir, new_dir.to_owned())
+        Event::Move(old_dir, new_dir.to_owned(), FileType::Dir)
     );
 
     let new_file = new_dir.join(random_string(5));
     File::create(&new_file).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(new_file))
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(new_file, FileType::File)
+    )
 }
 
 #[tokio::test]
@@ -232,7 +247,7 @@ async fn test_move_file() {
 
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::MoveFile(old_file, new_file)
+        Event::Move(old_file, new_file, FileType::File)
     )
 }
 
@@ -254,7 +269,10 @@ async fn test_dir_move_away() {
     let new_dir = unwatched_dir.path().join(random_string(5));
     fs::rename(old_dir.to_owned(), new_dir.to_owned()).unwrap();
 
-    assert_eq!(stream.next().await.unwrap().0, Event::MoveDirAway(old_dir));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::MoveAway(old_dir, FileType::Dir)
+    );
 
     let unwatched_file = new_dir.join(random_string(5));
     File::create(&unwatched_file).unwrap();
@@ -279,7 +297,10 @@ async fn test_file_move_away() {
     let new_file = unwatched_dir.path().join(random_string(5));
     fs::rename(old_file.to_owned(), new_file).unwrap();
 
-    assert_eq!(stream.next().await.unwrap().0, Event::MoveFileAway(old_file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::MoveAway(old_file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -302,12 +323,15 @@ async fn test_dir_move_into() {
 
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::MoveDirInto(new_dir.to_owned())
+        Event::MoveInto(new_dir.to_owned(), FileType::Dir)
     );
 
     let new_file = new_dir.join(random_string(5));
     File::create(&new_file).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(new_file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(new_file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -328,7 +352,10 @@ async fn test_file_move_into() {
     let new_file = top_dir.path().join(random_string(5));
     fs::rename(old_file, new_file.to_owned()).unwrap();
 
-    assert_eq!(stream.next().await.unwrap().0, Event::MoveFileInto(new_file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::MoveInto(new_file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -356,10 +383,13 @@ async fn test_file_move_away_and_move_into() {
     let next_new_file = top_dir.path().join(next_file_name);
     fs::rename(next_old_file, next_new_file.to_owned()).unwrap();
 
-    assert_eq!(stream.next().await.unwrap().0, Event::MoveFileAway(old_file));
     assert_eq!(
         stream.next().await.unwrap().0,
-        Event::MoveFileInto(next_new_file)
+        Event::MoveAway(old_file, FileType::File)
+    );
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::MoveInto(next_new_file, FileType::File)
     )
 }
 
@@ -379,7 +409,10 @@ async fn test_remove_file() {
     pin_mut!(stream);
 
     fs::remove_file(&path).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::DeleteFile(path))
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Delete(path, FileType::File)
+    )
 }
 
 #[tokio::test]
@@ -398,7 +431,10 @@ async fn test_remove_dir() {
     pin_mut!(stream);
 
     fs::remove_dir(&dir).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::DeleteDir(dir))
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Delete(dir, FileType::Dir)
+    )
 }
 
 #[tokio::test]
@@ -440,12 +476,15 @@ async fn test_remove_dir_recursively() {
     pin_mut!(stream);
 
     fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::DeleteFile(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Delete(file, FileType::File)
+    );
 
     for _ in 0..3 {
         assert_eq!(
             stream.next().await.unwrap().0,
-            Event::DeleteDir(sub_dir.to_owned())
+            Event::Delete(sub_dir.to_owned(), FileType::Dir)
         );
         assert_eq!(stream.next().await.unwrap().0, Event::Ignored);
         sub_dir.pop();
@@ -467,7 +506,10 @@ async fn test_modify_file() {
     pin_mut!(stream);
 
     fs::write(&file, "test").unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::Modify(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Modify(file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -489,7 +531,10 @@ async fn test_open_file() {
         stream.next().await.unwrap().0,
         Event::OpenTop(top_dir.path().to_owned())
     );
-    assert_eq!(stream.next().await.unwrap().0, Event::OpenFile(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Open(file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -511,7 +556,10 @@ async fn test_open_dir() {
         stream.next().await.unwrap().0,
         Event::OpenTop(top_dir.path().to_owned())
     );
-    assert_eq!(stream.next().await.unwrap().0, Event::OpenDir(sub_dir));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Open(sub_dir, FileType::Dir)
+    );
 }
 
 #[tokio::test]
@@ -534,7 +582,10 @@ async fn test_close_file() {
         stream.next().await.unwrap().0,
         Event::CloseTop(top_dir.path().to_owned())
     );
-    assert_eq!(stream.next().await.unwrap().0, Event::CloseFile(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Close(file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -551,7 +602,10 @@ async fn test_close_dir() {
     let stream = watcher.stream();
     pin_mut!(stream);
 
-    assert_eq!(stream.next().await.unwrap().0, Event::CloseDir(sub_dir));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Close(sub_dir, FileType::Dir)
+    );
     assert_eq!(
         stream.next().await.unwrap().0,
         Event::CloseTop(top_dir.path().to_owned())
@@ -578,7 +632,10 @@ async fn test_access_file() {
         stream.next().await.unwrap().0,
         Event::AccessTop(top_dir.path().to_owned())
     );
-    assert_eq!(stream.next().await.unwrap().0, Event::AccessFile(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Access(file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -599,7 +656,10 @@ async fn test_access_dir() {
         stream.next().await.unwrap().0,
         Event::AccessTop(top_dir.path().to_owned())
     );
-    assert_eq!(stream.next().await.unwrap().0, Event::AccessDir(sub_dir));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Access(sub_dir, FileType::Dir)
+    );
 }
 
 #[tokio::test]
@@ -620,7 +680,10 @@ async fn test_attrib_file() {
     perms.set_readonly(true);
     fs::set_permissions(&file, perms).unwrap();
 
-    assert_eq!(stream.next().await.unwrap().0, Event::AttribFile(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Attrib(file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -641,7 +704,10 @@ async fn test_attrib_dir() {
     perms.set_readonly(true);
     fs::set_permissions(&sub_dir, perms).unwrap();
 
-    assert_eq!(stream.next().await.unwrap().0, Event::AttribDir(sub_dir));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Attrib(sub_dir, FileType::Dir)
+    );
 
     let mut perms = fs::metadata(&top_dir).unwrap().permissions();
     perms.set_readonly(true);
@@ -669,7 +735,10 @@ async fn test_include_hidden_dir() {
 
     let file = dotdir.join(random_string(5));
     File::create(&file).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(file, FileType::File)
+    );
 }
 
 #[tokio::test]
@@ -706,7 +775,7 @@ async fn test_exclude_new_hidden_dir() {
         pin_mut!(stream);
         assert_eq!(
             stream.next().await.unwrap().0,
-            Event::CreateDir(dotdir.to_owned())
+            Event::Create(dotdir.to_owned(), FileType::Dir)
         );
     }
 
@@ -731,5 +800,8 @@ async fn test_must_include_hidden_top_dir() {
 
     let file = top_dir.join(random_string(5));
     File::create(&file).unwrap();
-    assert_eq!(stream.next().await.unwrap().0, Event::CreateFile(file));
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(file, FileType::File)
+    );
 }

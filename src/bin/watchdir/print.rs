@@ -7,7 +7,7 @@ use std::{
 };
 
 use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
-use watchdir::Event;
+use watchdir::{Event, FileType};
 
 use crate::theme::Theme;
 
@@ -71,7 +71,7 @@ impl<'a> Printer {
     ) -> Result<(), std::io::Error> {
         match event {
             Event::Unknown | Event::Noise | Event::Ignored => return Ok(()),
-            Event::Modify(path) => {
+            Event::Modify(path, _) => {
                 if !self.should(path) {
                     return Ok(());
                 }
@@ -121,25 +121,20 @@ impl<'a> Printer {
         write!(self.stdout, "{:<12}", head)?;
 
         match event {
-            Event::CreateDir(path)
-            | Event::CreateFile(path)
-            | Event::DeleteDir(path)
-            | Event::DeleteFile(path)
-            | Event::MoveDirAway(path)
-            | Event::MoveFileAway(path)
-            | Event::MoveDirInto(path)
-            | Event::MoveFileInto(path)
-            | Event::Modify(path)
-            | Event::OpenDir(path)
-            | Event::OpenFile(path)
-            | Event::CloseDir(path)
-            | Event::CloseFile(path)
-            | Event::AccessDir(path)
-            | Event::AccessFile(path)
-            | Event::AttribDir(path)
-            | Event::AttribFile(path)
-            | Event::Unmount(path) => {
-                let stripped_path = self.strip(path);
+            Event::Create(path, file_type)
+            | Event::Delete(path, file_type)
+            | Event::MoveAway(path, file_type)
+            | Event::MoveInto(path, file_type)
+            | Event::Modify(path, file_type)
+            | Event::Open(path, file_type)
+            | Event::Close(path, file_type)
+            | Event::Access(path, file_type)
+            | Event::Attrib(path, file_type)
+            | Event::Unmount(path, file_type) => {
+                let mut stripped_path = self.strip(path).to_owned();
+                if *file_type == FileType::Dir {
+                    stripped_path = stripped_path.join("");
+                }
 
                 if self.opts.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;
@@ -153,10 +148,13 @@ impl<'a> Printer {
                 write_color!(self.stdout, (color)[set_bold])?;
                 write!(self.stdout, "{}", stripped_path.to_string_lossy())?;
             }
-            Event::MoveFile(from_path, to_path)
-            | Event::MoveDir(from_path, to_path) => {
-                let stripped_from_path = self.strip(from_path);
-                let stripped_to_path = self.strip(to_path);
+            Event::Move(from_path, to_path, file_type) => {
+                let mut stripped_from_path = self.strip(from_path).to_owned();
+                let mut stripped_to_path = self.strip(to_path).to_owned();
+                if *file_type == FileType::Dir {
+                    stripped_from_path = stripped_from_path.join("");
+                    stripped_to_path = stripped_to_path.join("");
+                }
 
                 if self.opts.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;
