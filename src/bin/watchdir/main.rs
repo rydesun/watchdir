@@ -3,15 +3,11 @@ mod print;
 mod theme;
 
 use futures::{pin_mut, StreamExt};
-use mimalloc::MiMalloc;
 use termcolor::ColorChoice;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
 use watchdir::{Event, Watcher, WatcherOpts};
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() {
