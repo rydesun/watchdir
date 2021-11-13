@@ -80,6 +80,10 @@ impl<'a> Printer {
         }
         let (head, color) = self.opts.theme.head_and_color(event);
 
+        if self.opts.need_ansi {
+            self.stdout.write_all(b"\x1b[1000D")?;
+        }
+
         if self.opts.need_time {
             if let Some(offset) = self.time_offset {
                 t = t.to_offset(offset);
