@@ -4,7 +4,7 @@ mod theme;
 
 use futures::{pin_mut, StreamExt};
 use mimalloc::MiMalloc;
-use termcolor::{ColorChoice, StandardStream};
+use termcolor::ColorChoice;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
@@ -54,14 +54,19 @@ async fn main() {
         }
     });
 
-    let mut printer = print::Printer::new(
-        StandardStream::stdout((&opts.color).into()),
-        theme::Theme {},
-        opts.dir.unwrap().to_owned(),
-        opts.time,
-        opts.prefix,
-        opts.throttle_modify,
-    );
+    let mut printer = print::Printer::new(print::PrinterOpts {
+        need_ansi: match opts.color {
+            cli::ColorWhen::Always => true,
+            cli::ColorWhen::Auto => isatty_stdout(),
+            cli::ColorWhen::Never => false,
+        },
+        color_choice: (&opts.color).into(),
+        theme: theme::Theme {},
+        top_dir: opts.dir.unwrap().to_owned(),
+        need_time: opts.time,
+        need_prefix: opts.prefix,
+        timeout_modify: std::time::Duration::from_millis(opts.throttle_modify),
+    });
 
     loop {
         let (event, t) = rx.recv().await.unwrap();

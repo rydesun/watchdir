@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use termcolor::{ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
 use watchdir::Event;
 
 use crate::theme::Theme;
@@ -33,32 +33,28 @@ macro_rules! write_color {
 }
 
 pub struct Printer {
+    opts: PrinterOpts,
     stdout: StandardStream,
-    theme: Theme,
-    top_dir: PathBuf,
-    need_time: bool,
-    need_prefix: bool,
-    timeout_modify: Duration,
     counter: Arc<Mutex<HashSet<PathBuf>>>,
     time_offset: Option<time::UtcOffset>,
 }
 
+pub struct PrinterOpts {
+    pub need_ansi: bool,
+    pub color_choice: ColorChoice,
+    pub theme: Theme,
+    pub top_dir: PathBuf,
+    pub need_time: bool,
+    pub need_prefix: bool,
+    pub timeout_modify: Duration,
+}
+
 impl<'a> Printer {
-    pub fn new(
-        stdout: StandardStream,
-        theme: Theme,
-        top_dir: PathBuf,
-        need_time: bool,
-        need_prefix: bool,
-        timeout_modify: u64,
-    ) -> Self {
+    pub fn new(opts: PrinterOpts) -> Self {
+        let color_choice = opts.color_choice.to_owned();
         Self {
-            stdout,
-            theme,
-            top_dir,
-            need_time,
-            need_prefix,
-            timeout_modify: Duration::from_millis(timeout_modify),
+            opts,
+            stdout: StandardStream::stdout(color_choice),
             counter: Arc::new(Mutex::new(HashSet::new())),
             time_offset: if cfg!(unsound_local_offset) {
                 time::UtcOffset::current_local_offset().ok()
@@ -82,9 +78,9 @@ impl<'a> Printer {
             }
             _ => {}
         }
-        let (head, color) = self.theme.head_and_color(event);
+        let (head, color) = self.opts.theme.head_and_color(event);
 
-        if self.need_time {
+        if self.opts.need_time {
             if let Some(offset) = self.time_offset {
                 t = t.to_offset(offset);
             }
@@ -141,9 +137,13 @@ impl<'a> Printer {
             | Event::Unmount(path) => {
                 let stripped_path = self.strip(path);
 
-                if self.need_prefix {
+                if self.opts.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;
-                    write!(self.stdout, "{}", self.top_dir.to_string_lossy())?;
+                    write!(
+                        self.stdout,
+                        "{}",
+                        self.opts.top_dir.to_string_lossy()
+                    )?;
                 }
 
                 write_color!(self.stdout, (color)[set_bold])?;
@@ -154,9 +154,13 @@ impl<'a> Printer {
                 let stripped_from_path = self.strip(from_path);
                 let stripped_to_path = self.strip(to_path);
 
-                if self.need_prefix {
+                if self.opts.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;
-                    write!(self.stdout, "{}", self.top_dir.to_string_lossy())?;
+                    write!(
+                        self.stdout,
+                        "{}",
+                        self.opts.top_dir.to_string_lossy()
+                    )?;
                 }
 
                 write_color!(self.stdout, (color)[set_bold])?;
@@ -169,9 +173,13 @@ impl<'a> Printer {
                 write_color!(self.stdout, [set_dimmed])?;
                 write!(self.stdout, " → ")?;
 
-                if self.need_prefix {
+                if self.opts.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;
-                    write!(self.stdout, "{}", self.top_dir.to_string_lossy())?;
+                    write!(
+                        self.stdout,
+                        "{}",
+                        self.opts.top_dir.to_string_lossy()
+                    )?;
                 }
 
                 write_color!(self.stdout, (color)[set_bold])?;
@@ -196,12 +204,12 @@ impl<'a> Printer {
     }
 
     pub fn should(&mut self, path: &Path) -> bool {
-        if self.timeout_modify.is_zero() {
+        if self.opts.timeout_modify.is_zero() {
             true
         } else if self.counter.lock().unwrap().contains(path) {
             false
         } else {
-            let timeout = self.timeout_modify;
+            let timeout = self.opts.timeout_modify;
             let path = path.to_owned();
             let counter = Arc::clone(&self.counter);
 
@@ -215,6 +223,6 @@ impl<'a> Printer {
     }
 
     pub fn strip(&self, path: &'a Path) -> &'a Path {
-        path.strip_prefix(&self.top_dir).unwrap()
+        path.strip_prefix(&self.opts.top_dir).unwrap()
     }
 }
