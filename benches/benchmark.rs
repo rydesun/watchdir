@@ -1,195 +1,243 @@
 use std::{
     fs,
     io::{BufRead, BufReader},
-    path::PathBuf,
-    process::Stdio,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::{Duration, Instant},
 };
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{
+    criterion_group, criterion_main, measurement::WallTime, BenchmarkGroup,
+    BenchmarkId, Criterion,
+};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
-use watchdir::{Dotdir, Watcher, WatcherOpts};
 
-pub fn bench_watch_dir_with_subdirs(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Watch with subdirs");
-
-    let opts = WatcherOpts::new(Dotdir::Exclude, Vec::new());
-
-    for i in (0..=100).step_by(20) {
-        let top_dir_with_subdirs = tempfile::tempdir().unwrap();
-        let mut sub_dirs = PathBuf::new();
-        for _ in 0..i {
-            sub_dirs.push(random_string(5));
-        }
-        fs::create_dir_all(&top_dir_with_subdirs.path().join(&sub_dirs))
-            .unwrap();
-
-        group.bench_function(BenchmarkId::new("depth", i), |b| {
-            b.iter(|| Watcher::new(top_dir_with_subdirs.path(), opts))
-        });
-    }
+pub fn bench_init_dir_with_shallow_files(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Program init dir with shallow files");
+    group
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(1));
+    bench_init(
+        &mut group,
+        setup_tempdir_with_shallow_files,
+        &mut (0..100).step_by(20).chain((100..=1000).step_by(100)),
+    );
     group.finish()
 }
 
-pub fn bench_move_dir_with_subdirs(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Move with subdirs");
-
-    let opts = WatcherOpts::new(Dotdir::Exclude, Vec::new());
-
-    let tempdir = tempfile::tempdir().unwrap();
-    let dest_tempdir = tempdir.path().join(random_string(5));
-
-    for i in (0..=100).step_by(20) {
-        let top_dir_with_subdirs = tempfile::tempdir().unwrap();
-        let mut sub_dirs = PathBuf::new();
-        for _ in 0..i {
-            sub_dirs.push(random_string(5));
-        }
-        fs::create_dir_all(&top_dir_with_subdirs.path().join(&sub_dirs))
-            .unwrap();
-
-        let watcher = Watcher::new(top_dir_with_subdirs.path(), opts);
-
-        group.bench_function(BenchmarkId::new("depth", i), |b| {
-            b.iter(|| {
-                fs::rename(&top_dir_with_subdirs.path(), &dest_tempdir)
-                    .unwrap();
-                watcher.iter().next().unwrap();
-                fs::rename(&dest_tempdir, &top_dir_with_subdirs.path())
-                    .unwrap();
-            });
-        });
-    }
+pub fn bench_init_dir_with_shallow_subdirs(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Program init dir with shallow subdirs");
+    group
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(2));
+    bench_init(
+        &mut group,
+        setup_tempdir_with_shallow_subdirs,
+        &mut (0..100).step_by(20).chain((100..=1000).step_by(100)),
+    );
     group.finish()
 }
 
-pub fn bench_program_init(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Program init");
+pub fn bench_init_dir_with_deep_subdirs(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Program init dir with deep subdirs");
+    group
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(1));
+    bench_init(
+        &mut group,
+        setup_tempdir_with_deep_subdirs,
+        &mut (0..=50).step_by(5),
+    );
+    group.finish()
+}
 
-    for i in (0..=100).step_by(20) {
-        let top_dir_with_subdirs = tempfile::tempdir().unwrap();
-        let mut sub_dirs = PathBuf::new();
-        for _ in 0..i {
-            sub_dirs.push(random_string(5));
-        }
-        let deepest_dir = &top_dir_with_subdirs.path().join(&sub_dirs);
-        fs::create_dir_all(deepest_dir).unwrap();
-        for i in deepest_dir
-            .ancestors()
-            .take_while(|d| *d != top_dir_with_subdirs.path())
-        {
-            for _ in 0..=100 {
-                fs::File::create(i.join(random_string(5))).unwrap();
-            }
-        }
+pub fn bench_init(
+    group: &mut BenchmarkGroup<'_, WallTime>,
+    setup_tempdir: fn(&Path, u32),
+    iterator: &mut dyn Iterator<Item = u32>,
+) {
+    iterator.for_each(|count| {
+        let top_dir = tempfile::tempdir().unwrap();
+        let top_dir = top_dir.path();
+        setup_tempdir(top_dir, count);
 
-        group.bench_function(BenchmarkId::new("watchdir", i), |b| {
-            b.iter(|| {
-                let mut p =
-                    std::process::Command::new(env!("CARGO_BIN_EXE_watchdir"))
-                        .arg("--include-hidden")
-                        .arg(top_dir_with_subdirs.path())
-                        .stderr(Stdio::piped())
-                        .spawn()
-                        .unwrap();
-                let mut stderr =
-                    BufReader::new(p.stderr.as_mut().unwrap()).lines().skip(1);
-                assert!(stderr
-                    .next()
-                    .unwrap()
-                    .unwrap()
-                    .contains("Initializing..."));
-                assert!(stderr
-                    .next()
-                    .unwrap()
-                    .unwrap()
-                    .contains("Initialized"));
-                p.kill().unwrap();
-                p.wait().unwrap();
-            })
-        });
+        let mut bin_watchdir = Command::new(env!("CARGO_BIN_EXE_watchdir"));
+        let exec_watchdir = bin_watchdir
+            .arg(top_dir)
+            .arg("--include-hidden")
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
 
-        group.bench_function(BenchmarkId::new("inotifywait", i), |b| {
-            b.iter(|| {
-                let mut p = std::process::Command::new("inotifywait")
-                    .arg("--monitor")
-                    .arg("--recursive")
-                    .arg(top_dir_with_subdirs.path())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .unwrap();
-                let mut stderr =
-                    BufReader::new(p.stderr.as_mut().unwrap()).lines();
-                assert!(stderr
-                    .next()
-                    .unwrap()
-                    .unwrap()
-                    .contains("Setting up watches"));
-                assert!(stderr
-                    .next()
-                    .unwrap()
-                    .unwrap()
-                    .contains("Watches established"));
-                p.kill().unwrap();
-                p.wait().unwrap();
-            })
-        });
+        let mut bin_inotifywait = Command::new("inotifywait");
+        let exec_inotifywait = bin_inotifywait
+            .arg(top_dir)
+            .arg("--monitor")
+            .arg("--recursive")
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
 
-        group.bench_function(BenchmarkId::new("fswatch", i), |b| {
-            b.iter(|| {
-                let mut p = std::process::Command::new("fswatch")
-                    .arg("--verbose")
-                    .arg("--recursive")
-                    .arg(top_dir_with_subdirs.path())
-                    .stderr(Stdio::piped())
-                    .stdout(Stdio::null())
-                    .spawn()
-                    .unwrap();
-                let stderr =
-                    BufReader::new(p.stderr.as_mut().unwrap()).lines();
-                for line in stderr {
-                    if line.unwrap().contains("run: Number of records:") {
-                        break;
-                    }
+        let mut bin_fswatch = Command::new("fswatch");
+        let exec_fswatch = bin_fswatch
+            .arg(top_dir)
+            .arg("--verbose")
+            .arg("--recursive")
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+
+        group.bench_function(BenchmarkId::new("watchdir", count), |b| {
+            b.iter_custom(|iters| {
+                let mut total = Duration::default();
+                for _i in 0..iters {
+                    let start = Instant::now();
+                    let mut exec_watchdir = exec_watchdir.spawn().unwrap();
+                    let mut stderr =
+                        BufReader::new(exec_watchdir.stderr.as_mut().unwrap())
+                            .lines()
+                            .skip(1);
+                    assert!(stderr
+                        .next()
+                        .unwrap()
+                        .unwrap()
+                        .contains("Initializing..."));
+                    assert!(stderr
+                        .next()
+                        .unwrap()
+                        .unwrap()
+                        .contains("Initialized"));
+                    total += start.elapsed();
+                    exec_watchdir.kill().unwrap();
+                    exec_watchdir.wait().unwrap();
                 }
-                p.kill().unwrap();
-                p.wait().unwrap();
+                total
             })
         });
-    }
+
+        group.bench_function(BenchmarkId::new("inotifywait", count), |b| {
+            b.iter_custom(|iters| {
+                let mut total = Duration::default();
+                for _i in 0..iters {
+                    let start = Instant::now();
+                    let mut exec_inotifywait =
+                        exec_inotifywait.spawn().unwrap();
+                    let mut stderr = BufReader::new(
+                        exec_inotifywait.stderr.as_mut().unwrap(),
+                    )
+                    .lines();
+                    assert!(stderr
+                        .next()
+                        .unwrap()
+                        .unwrap()
+                        .contains("Setting up watches"));
+                    assert!(stderr
+                        .next()
+                        .unwrap()
+                        .unwrap()
+                        .contains("Watches established"));
+                    total += start.elapsed();
+                    exec_inotifywait.kill().unwrap();
+                    exec_inotifywait.wait().unwrap();
+                }
+                total
+            })
+        });
+
+        group.bench_function(BenchmarkId::new("fswatch", count), |b| {
+            b.iter_custom(|iters| {
+                let mut total = Duration::default();
+                for _i in 0..iters {
+                    let start = Instant::now();
+                    let mut exec_fswatch = exec_fswatch.spawn().unwrap();
+                    let stderr =
+                        BufReader::new(exec_fswatch.stderr.as_mut().unwrap())
+                            .lines();
+                    for line in stderr {
+                        if line.unwrap().contains("run: Number of records:") {
+                            break;
+                        }
+                    }
+                    total += start.elapsed();
+                    exec_fswatch.kill().unwrap();
+                    exec_fswatch.wait().unwrap();
+                }
+                total
+            })
+        });
+    });
+}
+
+pub fn bench_move_dir_with_shallow_files(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Program move dir with shallow files");
+    group
+        .warm_up_time(Duration::from_millis(100))
+        .measurement_time(Duration::from_millis(400));
+    bench_move_dir(
+        &mut group,
+        setup_tempdir_with_shallow_files,
+        &mut (0..100).step_by(20).chain((100..=1000).step_by(100)),
+    );
     group.finish()
 }
 
-pub fn bench_program_watch_move_dir(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Program watch move");
+pub fn bench_move_dir_with_shallow_subdirs(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Program move dir with shallow subdirs");
+    group
+        .warm_up_time(Duration::from_millis(100))
+        .measurement_time(Duration::from_millis(400));
+    bench_move_dir(
+        &mut group,
+        setup_tempdir_with_shallow_subdirs,
+        &mut (0..100).step_by(20).chain((100..=1000).step_by(100)),
+    );
+    group.finish()
+}
 
-    for i in (0..=100).step_by(20) {
-        let topdir = tempfile::tempdir().unwrap();
-        let from_tempdir = topdir.path().join(random_string(5));
-        let dest_tempdir = topdir.path().join(random_string(5));
-        let mut sub_dirs = PathBuf::new();
-        for _ in 0..i {
-            sub_dirs.push(random_string(5));
-        }
-        let deepest_dir = from_tempdir.join(&sub_dirs);
-        fs::create_dir_all(&deepest_dir).unwrap();
-        for i in deepest_dir.ancestors().take_while(|d| *d != topdir.path()) {
-            for _ in 0..=100 {
-                fs::File::create(i.join(random_string(5))).unwrap();
-            }
-        }
+pub fn bench_move_dir_with_deep_subdirs(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Program move dir with deep subdirs");
+    group
+        .warm_up_time(Duration::from_millis(100))
+        .measurement_time(Duration::from_millis(400));
+    bench_move_dir(
+        &mut group,
+        setup_tempdir_with_deep_subdirs,
+        &mut (0..=50).step_by(5),
+    );
+    group.finish()
+}
 
-        group.bench_function(BenchmarkId::new("watchdir", i), |b| {
-            let mut p =
-                std::process::Command::new(env!("CARGO_BIN_EXE_watchdir"))
-                    .arg("--include-hidden")
-                    .arg(topdir.path())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .unwrap();
+pub fn bench_move_dir(
+    group: &mut BenchmarkGroup<'_, WallTime>,
+    setup_tempdir: fn(&Path, u32),
+    iterator: &mut dyn Iterator<Item = u32>,
+) {
+    iterator.for_each(|count| {
+        let top_dir = tempfile::tempdir().unwrap();
+        let top_dir = top_dir.path();
+        let from_tempdir = top_dir.join(random_string(5));
+        fs::create_dir(&from_tempdir).unwrap();
+        setup_tempdir(&from_tempdir, count);
+        let dest_tempdir = top_dir.join(random_string(5));
+
+        let mut bin_watchdir = Command::new(env!("CARGO_BIN_EXE_watchdir"));
+        let exec_watchdir = bin_watchdir
+            .arg(top_dir)
+            .arg("--include-hidden")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let mut bin_inotifywait = Command::new("inotifywait");
+        let exec_inotifywait = bin_inotifywait
+            .arg(top_dir)
+            .arg("--monitor")
+            .arg("--recursive")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        group.bench_function(BenchmarkId::new("watchdir", count), |b| {
+            let mut exec_watchdir = exec_watchdir.spawn().unwrap();
             let mut stdout =
-                BufReader::new(p.stdout.as_mut().unwrap()).lines();
-            let stderr = BufReader::new(p.stderr.as_mut().unwrap()).lines();
+                BufReader::new(exec_watchdir.stdout.as_mut().unwrap()).lines();
+            let stderr =
+                BufReader::new(exec_watchdir.stderr.as_mut().unwrap()).lines();
             for line in stderr {
                 if line.unwrap().contains("Initialized") {
                     break;
@@ -202,22 +250,18 @@ pub fn bench_program_watch_move_dir(c: &mut Criterion) {
                 fs::rename(&dest_tempdir, &from_tempdir).unwrap();
                 assert!(stdout.next().unwrap().unwrap().contains("Move "));
             });
-            p.kill().unwrap();
-            p.wait().unwrap();
+            exec_watchdir.kill().unwrap();
+            exec_watchdir.wait().unwrap();
         });
 
-        group.bench_function(BenchmarkId::new("inotifywait", i), |b| {
-            let mut p = std::process::Command::new("inotifywait")
-                .arg("--monitor")
-                .arg("--recursive")
-                .arg(topdir.path())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
+        group.bench_function(BenchmarkId::new("inotifywait", count), |b| {
+            let mut exec_inotifywait = exec_inotifywait.spawn().unwrap();
             let mut stdout =
-                BufReader::new(p.stdout.as_mut().unwrap()).lines();
-            let stderr = BufReader::new(p.stderr.as_mut().unwrap()).lines();
+                BufReader::new(exec_inotifywait.stdout.as_mut().unwrap())
+                    .lines();
+            let stderr =
+                BufReader::new(exec_inotifywait.stderr.as_mut().unwrap())
+                    .lines();
             for line in stderr {
                 if line.unwrap().contains("Watches established") {
                     break;
@@ -242,13 +286,33 @@ pub fn bench_program_watch_move_dir(c: &mut Criterion) {
                 assert!(stdout.next().unwrap().unwrap().contains("MOVED_TO"));
                 assert!(stdout.next().unwrap().unwrap().contains("MOVE_SELF"));
             });
-            p.kill().unwrap();
-            p.wait().unwrap();
+            exec_inotifywait.kill().unwrap();
+            exec_inotifywait.wait().unwrap();
         });
 
         // fswatch takes too much times, so there is no need to bench it.
-    }
-    group.finish()
+    });
+}
+
+fn setup_tempdir_with_shallow_files(tempdir: &Path, count: u32) {
+    (0..count).for_each(|_| {
+        fs::File::create(tempdir.join(random_string(5))).unwrap();
+    });
+}
+
+fn setup_tempdir_with_shallow_subdirs(tempdir: &Path, count: u32) {
+    (0..count).for_each(|_| {
+        fs::create_dir(tempdir.join(random_string(5))).unwrap();
+    });
+}
+
+fn setup_tempdir_with_deep_subdirs(tempdir: &Path, depth: u32) {
+    let mut subdirs = PathBuf::new();
+    (0..depth).for_each(|_| {
+        subdirs.push(random_string(5));
+    });
+    let bottom_dir = tempdir.join(&subdirs);
+    fs::create_dir_all(bottom_dir).unwrap();
 }
 
 fn random_string(len: usize) -> String {
@@ -257,9 +321,11 @@ fn random_string(len: usize) -> String {
 
 criterion_group!(
     benches,
-    bench_watch_dir_with_subdirs,
-    bench_move_dir_with_subdirs,
-    bench_program_init,
-    bench_program_watch_move_dir,
+    bench_init_dir_with_shallow_files,
+    bench_init_dir_with_shallow_subdirs,
+    bench_init_dir_with_deep_subdirs,
+    bench_move_dir_with_shallow_files,
+    bench_move_dir_with_shallow_subdirs,
+    bench_move_dir_with_deep_subdirs,
 );
 criterion_main!(benches);
