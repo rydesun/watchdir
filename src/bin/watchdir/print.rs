@@ -117,7 +117,7 @@ impl<'a> Printer {
             )?;
         }
 
-        write_color!(self.stdout, (color)[set_bold])?;
+        write_color!(self.stdout, (color)[])?;
         write!(self.stdout, "{:<12}", head)?;
 
         match event {
@@ -145,7 +145,7 @@ impl<'a> Printer {
                     )?;
                 }
 
-                write_color!(self.stdout, (color)[set_bold])?;
+                write_color!(self.stdout, (color)[])?;
                 write!(self.stdout, "{}", stripped_path.to_string_lossy())?;
             }
             Event::Move(from_path, to_path, file_type) => {
@@ -165,7 +165,7 @@ impl<'a> Printer {
                     )?;
                 }
 
-                write_color!(self.stdout, (color)[set_bold])?;
+                write_color!(self.stdout, (color)[])?;
                 write!(
                     self.stdout,
                     "{}",
@@ -184,7 +184,7 @@ impl<'a> Printer {
                     )?;
                 }
 
-                write_color!(self.stdout, (color)[set_bold])?;
+                write_color!(self.stdout, (color)[])?;
                 write!(self.stdout, "{}", stripped_to_path.to_string_lossy())?;
             }
             Event::MoveTop(path)
@@ -194,7 +194,7 @@ impl<'a> Printer {
             | Event::AttribTop(path)
             | Event::OpenTop(path)
             | Event::CloseTop(path) => {
-                write_color!(self.stdout, reset)?;
+                write_color!(self.stdout, [set_dimmed])?;
                 write!(self.stdout, "{}", path.to_string_lossy())?;
             }
             _ => {}
