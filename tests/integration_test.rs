@@ -785,6 +785,66 @@ async fn test_exclude_new_hidden_dir() {
 }
 
 #[tokio::test]
+async fn test_unwatch_moved_hidden_dir() {
+    let tempdir = tempfile::tempdir().unwrap();
+
+    let dir = tempdir.as_ref().join("dir");
+    fs::create_dir(&dir).unwrap();
+
+    let mut watcher = Watcher::new(
+        tempdir.as_ref(),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
+    )
+    .unwrap();
+
+    let dotdir = tempdir.as_ref().join(".dotdir");
+    fs::rename(&dir, &dotdir).unwrap();
+    {
+        let stream = watcher.stream();
+        pin_mut!(stream);
+
+        assert_eq!(
+            stream.next().await.unwrap().0,
+            Event::Move(dir.to_owned(), dotdir.to_owned(), FileType::Dir)
+        );
+        let file = dotdir.join(random_string(5));
+        File::create(&file).unwrap();
+        assert_eq!(stream.next().await.unwrap().0, Event::Ignored);
+    }
+    assert!(!watcher.has_next_event());
+}
+
+#[tokio::test]
+async fn test_rewatch_moved_hidden_dir() {
+    let tempdir = tempfile::tempdir().unwrap();
+
+    let dotdir = tempdir.as_ref().join(".dotdir");
+    fs::create_dir(&dotdir).unwrap();
+
+    let mut watcher = Watcher::new(
+        tempdir.as_ref(),
+        WatcherOpts::new(Dotdir::Exclude, Vec::new()),
+    )
+    .unwrap();
+
+    let dir = tempdir.as_ref().join("dir");
+    fs::rename(&dotdir, &dir).unwrap();
+    let stream = watcher.stream();
+    pin_mut!(stream);
+
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Move(dotdir.to_owned(), dir.to_owned(), FileType::Dir)
+    );
+    let file = dir.join(random_string(5));
+    File::create(&file).unwrap();
+    assert_eq!(
+        stream.next().await.unwrap().0,
+        Event::Create(file, FileType::File)
+    );
+}
+
+#[tokio::test]
 async fn test_must_include_hidden_top_dir() {
     let tempdir = tempfile::tempdir().unwrap();
     let top_dir = tempdir.as_ref().join(".dotdir");
