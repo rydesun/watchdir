@@ -62,6 +62,11 @@ async fn main() {
         need_time: opts.time,
         need_prefix: opts.prefix,
         timeout_modify: std::time::Duration::from_millis(opts.throttle_modify),
+        event_filter: opts
+            .exclude_events
+            .into_iter()
+            .map(|v| v.into())
+            .collect(),
     });
 
     loop {
@@ -137,6 +142,17 @@ impl From<cli::ExtraEvent> for watchdir::ExtraEvent {
             cli::ExtraEvent::Access => watchdir::ExtraEvent::Access,
             cli::ExtraEvent::Open => watchdir::ExtraEvent::Open,
             cli::ExtraEvent::Close => watchdir::ExtraEvent::Close,
+        }
+    }
+}
+
+impl From<cli::Event> for print::EventGroup {
+    fn from(v: cli::Event) -> Self {
+        match v {
+            cli::Event::Create => print::EventGroup::Create,
+            cli::Event::Delete => print::EventGroup::Delete,
+            cli::Event::Move => print::EventGroup::Move,
+            cli::Event::Unmount => print::EventGroup::Unmount,
         }
     }
 }

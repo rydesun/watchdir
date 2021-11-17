@@ -47,6 +47,7 @@ pub struct PrinterOpts {
     pub need_time: bool,
     pub need_prefix: bool,
     pub timeout_modify: Duration,
+    pub event_filter: Vec<EventGroup>,
 }
 
 impl<'a> Printer {
@@ -78,6 +79,12 @@ impl<'a> Printer {
             }
             _ => {}
         }
+        for e in &self.opts.event_filter {
+            if e.contains(event) {
+                return Ok(());
+            }
+        }
+
         let (head, color) = self.opts.theme.head_and_color(event);
 
         if self.opts.need_ansi {
@@ -226,5 +233,33 @@ impl<'a> Printer {
 
     pub fn strip(&self, path: &'a Path) -> &'a Path {
         path.strip_prefix(&self.opts.top_dir).unwrap()
+    }
+}
+
+pub enum EventGroup {
+    Create,
+    Delete,
+    Move,
+    Unmount,
+}
+
+impl EventGroup {
+    fn contains(&self, event: &Event) -> bool {
+        match self {
+            Self::Create => matches!(event, Event::Create(..)),
+            Self::Delete => {
+                matches!(event, Event::Delete(..) | Event::DeleteTop(..))
+            }
+            Self::Move => matches!(
+                event,
+                Event::Move(..)
+                    | Event::MoveAway(..)
+                    | Event::MoveInto(..)
+                    | Event::MoveTop(..)
+            ),
+            Self::Unmount => {
+                matches!(event, Event::Unmount(..) | Event::UnmountTop(..))
+            }
+        }
     }
 }

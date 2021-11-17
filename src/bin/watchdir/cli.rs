@@ -38,6 +38,10 @@ pub struct Opts {
     #[clap(value_name = "EVENT_TYPE", long, arg_enum, use_delimiter = true)]
     pub extra_events: Vec<ExtraEvent>,
 
+    /// Exclude default events
+    #[clap(value_name = "EVENT_TYPE", long, arg_enum, use_delimiter = true)]
+    pub exclude_events: Vec<Event>,
+
     /// Canonicalize paths
     #[clap(long)]
     canonicalize: bool,
@@ -61,6 +65,14 @@ pub struct Opts {
     /// Throttle modify event for some milliseconds
     #[clap(value_name = "TIME", long, default_value = "1000")]
     pub throttle_modify: u64,
+}
+
+#[derive(ArgEnum)]
+pub enum Event {
+    Create,
+    Delete,
+    Move,
+    Unmount,
 }
 
 #[derive(ArgEnum)]
