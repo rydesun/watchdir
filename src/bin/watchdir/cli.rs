@@ -5,8 +5,8 @@ use std::{
     str::FromStr,
 };
 
-use clap::{ArgEnum, Clap, IntoApp, ValueHint};
-use clap_generate::{generate, generators, Generator};
+use clap::{ArgEnum, IntoApp, Parser, ValueHint};
+use clap_generate::{generate, generators};
 use lazy_static::lazy_static;
 use snafu::{ResultExt, Snafu};
 
@@ -16,9 +16,9 @@ lazy_static! {
             .join(" ");
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(version = VERSION.as_str())]
-#[clap(setting = clap::AppSettings::ColoredHelp)]
+#[clap(color = clap::ColorChoice::Auto)]
 #[clap(term_width = 79)]
 pub struct Opts {
     /// Include hidden subdirectories
@@ -67,7 +67,7 @@ pub struct Opts {
     pub throttle_modify: u64,
 }
 
-#[derive(ArgEnum)]
+#[derive(ArgEnum, Clone)]
 pub enum Event {
     Create,
     Delete,
@@ -75,7 +75,7 @@ pub enum Event {
     Unmount,
 }
 
-#[derive(ArgEnum)]
+#[derive(ArgEnum, Clone)]
 pub enum ExtraEvent {
     Modify,
     Access,
@@ -84,7 +84,7 @@ pub enum ExtraEvent {
     Close,
 }
 
-#[derive(ArgEnum)]
+#[derive(ArgEnum, Clone)]
 pub enum ColorWhen {
     Auto,
     Always,
@@ -117,7 +117,7 @@ impl FromStr for Dir {
     }
 }
 
-#[derive(ArgEnum, Clap, PartialEq)]
+#[derive(Parser, ArgEnum, Clone, PartialEq)]
 pub enum Shell {
     Bash,
     Fish,
@@ -157,15 +157,12 @@ pub fn parse() -> Opts {
 }
 
 pub fn print_completions(shell: Shell) {
-    fn print<G: Generator>() {
-        let mut buf = std::io::stdout();
-        let mut app = Opts::into_app();
-        let name = app.get_name().to_string();
-        generate::<G, _>(&mut app, name, &mut buf);
-    }
+    let mut buf = std::io::stdout();
+    let mut app = Opts::into_app();
+    let name = app.get_name().to_string();
     match shell {
-        Shell::Bash => print::<generators::Bash>(),
-        Shell::Fish => print::<generators::Fish>(),
-        Shell::Zsh => print::<generators::Zsh>(),
+        Shell::Bash => generate(generators::Bash, &mut app, name, &mut buf),
+        Shell::Fish => generate(generators::Fish, &mut app, name, &mut buf),
+        Shell::Zsh => generate(generators::Zsh, &mut app, name, &mut buf),
     }
 }

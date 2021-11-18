@@ -15,11 +15,11 @@ Use `--hidden` option to supress this behavior.
 ## Usage
 
 ```bash
-watchdir [FLAGS] [OPTIONS] <DIR>
+watchdir [OPTIONS] <DIR>
 ```
 
 ## Installation
 
 ```bash
-cargo install --locked --git https://github.com/rydesun/watchdir
+RUSTFLAGS="--cfg unsound_local_offset" cargo install --locked --git https://github.com/rydesun/watchdir
 ```
