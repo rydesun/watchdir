@@ -23,11 +23,11 @@ async fn main() {
         .unwrap();
     let file_theme = dirs.config_dir().join("theme.yaml");
     let printer_theme = std::fs::File::open(file_theme)
-        .and_then(|f| {
+        .map(|f| {
             let res: Result<theme::Theme, serde_yaml::Error> =
                 serde_yaml::from_reader(f);
             match res {
-                Ok(v) => Ok(v),
+                Ok(v) => v,
                 Err(e) => {
                     error!("Failed to parse theme config: {}", e);
                     std::process::exit(1);
