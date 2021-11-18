@@ -17,9 +17,12 @@ async-stream = "0.3"
 clap = "=3.0.0-beta.4"
 clap_derive = "=3.0.0-beta.4"
 clap_generate = "=3.0.0-beta.4"
+directories = "4"
 futures = "0.3"
 lazy_static = "1"
 libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.8"
 snafu = "0.6"
 termcolor = "1.1"
 time = { version = "0.3", features = ["formatting", "local-offset", "macros"] }

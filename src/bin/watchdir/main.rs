@@ -19,6 +19,29 @@ async fn main() {
         cli::ColorWhen::Never => false,
     });
 
+    let dirs = directories::ProjectDirs::from("", "", env!("CARGO_BIN_NAME"))
+        .unwrap();
+    let file_theme = dirs.config_dir().join("theme.yaml");
+    let printer_theme = std::fs::File::open(file_theme)
+        .and_then(|f| {
+            let res: Result<theme::Theme, serde_yaml::Error> =
+                serde_yaml::from_reader(f);
+            match res {
+                Ok(v) => Ok(v),
+                Err(e) => {
+                    error!("Failed to parse theme config: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        })
+        .unwrap_or_else(|e| {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                error!("Failed to read theme config: {}", e);
+                std::process::exit(1);
+            }
+            theme::Theme::default()
+        });
+
     info!("version: {}", *cli::VERSION);
     info!("Initializing...");
     let now = std::time::Instant::now();
@@ -57,7 +80,7 @@ async fn main() {
             cli::ColorWhen::Never => false,
         },
         color_choice: (&opts.color).into(),
-        theme: theme::Theme {},
+        theme: printer_theme,
         top_dir: opts.dir.unwrap().to_owned(),
         need_time: opts.time,
         need_prefix: opts.prefix,

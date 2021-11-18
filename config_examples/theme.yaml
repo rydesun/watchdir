@@ -1,0 +1,14 @@
+# Customize output colors.
+# Put this file in `~/.config/watchdir/`. $XDG_CONFIG_HOME is preferred.
+
+# Event type and terminal color name.
+Create: yellow
+
+# ANSI 256 color codes supported.
+MoveInto: 2
+MoveAway: 123
+
+# RGB supported.
+Move: 200,123,222
+
+# Omitted event types will use default colors.
