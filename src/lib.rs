@@ -120,8 +120,13 @@ impl Watcher {
             event_seq: inotify::EventSeq::new(fd),
             cached_inotify_event: None,
         };
-        if let (Some(top_wd), _) = watcher.add_watch_all(dir) {
+        if let (Some(top_wd), walk) = watcher.add_watch_all(dir) {
             watcher.top_wd = top_wd;
+            for entry in walk {
+                if let Err(e) = watcher.add_watch(entry.path()) {
+                    warn!("{}", e);
+                }
+            }
         }
 
         Ok(watcher)
@@ -159,7 +164,13 @@ impl Watcher {
                             }
                         } else {
                             if guard(self.opts, to_path, FileType::Dir) {
-                                self.add_watch_all(to_path);
+                                let (_, walk) = self.add_watch_all(to_path);
+                                for entry in walk {
+                                    if let Err(e) = self.add_watch(
+                                        entry.path()) {
+                                        warn!("{}", e);
+                                    }
+                                }
                             }
                         }
                         yield (event, inotify_event.t)
@@ -175,7 +186,13 @@ impl Watcher {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
                             if guard(self.opts, path,
                                 metadata.file_type().into()) {
-                                self.add_watch_all(path);
+                                let (_, walk) = self.add_watch_all(path);
+                                for entry in walk {
+                                    if let Err(e) = self.add_watch(
+                                        entry.path()) {
+                                        warn!("{}", e);
+                                    }
+                                }
                             }
                         }
                         yield (event, inotify_event.t)
@@ -184,12 +201,19 @@ impl Watcher {
                         if let Ok(metadata) = fs::symlink_metadata(path) {
                             if guard(self.opts, path,
                                 metadata.file_type().into()) {
-                                let next_events = self
+                                let next_events: Vec<Event> = self
                                     .add_watch_all(path)
                                     .1
-                                    .into_iter()
+                                    .map(|entry| entry.path().to_owned())
+                                    .map(|path| {
+                                        if let Err(e) = self.add_watch(&path) {
+                                            warn!("{}", e);
+                                        }
+                                        path
+                                    })
                                     .map(|path| Event::Create(
-                                            path, FileType::Dir));
+                                            path, FileType::Dir))
+                                    .collect();
 
                                 yield (event, inotify_event.t);
                                 for event in next_events {
@@ -244,7 +268,10 @@ impl Watcher {
         Ok(wd)
     }
 
-    fn add_watch_all(&mut self, path: &Path) -> (Option<i32>, Vec<PathBuf>) {
+    fn add_watch_all(
+        &mut self,
+        path: &Path,
+    ) -> (Option<i32>, impl Iterator<Item = walkdir::DirEntry>) {
         let top_wd = match self.add_watch(path) {
             Err(e) => {
                 warn!("{}", e);
@@ -256,23 +283,10 @@ impl Watcher {
         let new_dirs = WalkDir::new(path)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|entry| {
-                let path = entry.path();
-                if guard(opts, path, entry.file_type().into()) {
-                    match self.add_watch(path) {
-                        Err(e) => {
-                            warn!("{}", e);
-                            false
-                        }
-                        Ok(_) => true,
-                    }
-                } else {
-                    false
-                }
+            .filter_entry(move |entry| {
+                guard(opts, entry.path(), entry.file_type().into())
             })
-            .filter_map(Result::ok)
-            .map(|entry| entry.path().to_owned())
-            .collect();
+            .filter_map(Result::ok);
 
         (top_wd, new_dirs)
     }
