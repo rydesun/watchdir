@@ -7,6 +7,7 @@ use std::{
 
 use async_stream::stream;
 use futures::Stream;
+use snafu::Snafu;
 use tokio::{fs::File, io::AsyncReadExt};
 use tracing::{debug, instrument};
 
@@ -14,6 +15,17 @@ const MAX_FILENAME_LENGTH: usize = 255;
 const INOTIFY_EVENT_HEADER_SIZE: usize = size_of::<libc::inotify_event>();
 const MAX_INOTIFY_EVENT_SIZE: usize =
     INOTIFY_EVENT_HEADER_SIZE + MAX_FILENAME_LENGTH + 1;
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Buffer overflow"))]
+    Overflow,
+
+    #[snafu(display("Unknown event"))]
+    UnknownEvent,
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct EventSeq {
     #[allow(dead_code)]
@@ -37,7 +49,7 @@ impl EventSeq {
         }
     }
 
-    pub fn stream(&mut self) -> impl Stream<Item = Event> + '_ {
+    pub fn stream(&mut self) -> impl Stream<Item = Result<Event>> + '_ {
         stream! {
             loop {
                 if self.offset >= self.len {
@@ -49,27 +61,26 @@ impl EventSeq {
                 }
 
                 let event = self.parse();
-                self.offset += INOTIFY_EVENT_HEADER_SIZE + event.len as usize;
+                if let Ok(ref event) = event {
+                    self.offset += INOTIFY_EVENT_HEADER_SIZE + event.len as usize;
+                }
                 yield event
             }
         }
     }
 
     #[instrument(skip(self), fields(len=self.len, offset=self.offset))]
-    fn parse(&self) -> Event {
+    fn parse(&self) -> Result<Event> {
         let raw = &self.buffer[self.offset..];
-        let raw_event: libc::inotify_event;
-        loop {
-            let res: libc::inotify_event =
-                unsafe { std::ptr::read(raw.as_ptr() as *const _) };
-            if res.wd > 0 {
-                raw_event = res;
-                break;
-            } else {
-                // FIXME: What happened?
-                debug!("Invalid inotify event");
-            }
-        }
+        let res: libc::inotify_event =
+            unsafe { std::ptr::read(raw.as_ptr() as *const _) };
+        let raw_event: libc::inotify_event = if res.wd > 0 {
+            res
+        } else if res.mask & libc::IN_Q_OVERFLOW > 0 {
+            return Err(Error::Overflow);
+        } else {
+            return Err(Error::UnknownEvent);
+        };
 
         let now = time::OffsetDateTime::now_utc();
 
@@ -129,7 +140,7 @@ impl EventSeq {
         };
         debug!(?event);
 
-        event
+        Ok(event)
     }
 
     pub fn has_next_event(&mut self) -> bool {

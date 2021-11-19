@@ -139,7 +139,8 @@ impl Watcher {
                         None => {
                             let stream = self.event_seq.stream();
                             pin_mut!(stream);
-                            stream.next().await.unwrap()
+                            // FIXME: handle error
+                            stream.next().await.unwrap().unwrap()
                         }
                     };
                     let (event, wd) = self.recognize(&inotify_event).await;
@@ -301,7 +302,8 @@ impl Watcher {
         if self.event_seq.has_next_event() {
             let stream = self.event_seq.stream();
             pin_mut!(stream);
-            Some(stream.next().await.unwrap())
+            // FIXME: handle error
+            Some(stream.next().await.unwrap().unwrap())
         } else {
             None
         }
