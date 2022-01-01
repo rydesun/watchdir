@@ -5,8 +5,9 @@ use std::{
     str::FromStr,
 };
 
-use clap::{ArgEnum, IntoApp, Parser, ValueHint};
-use clap_generate::{generate, generators};
+use clap::{IntoApp, Parser, ValueHint};
+use clap_complete::{generate, shells};
+use clap_derive::{ArgEnum, Parser};
 use lazy_static::lazy_static;
 use snafu::{ResultExt, Snafu};
 
@@ -161,8 +162,8 @@ pub fn print_completions(shell: Shell) {
     let mut app = Opts::into_app();
     let name = app.get_name().to_string();
     match shell {
-        Shell::Bash => generate(generators::Bash, &mut app, name, &mut buf),
-        Shell::Fish => generate(generators::Fish, &mut app, name, &mut buf),
-        Shell::Zsh => generate(generators::Zsh, &mut app, name, &mut buf),
+        Shell::Bash => generate(shells::Bash, &mut app, name, &mut buf),
+        Shell::Fish => generate(shells::Fish, &mut app, name, &mut buf),
+        Shell::Zsh => generate(shells::Zsh, &mut app, name, &mut buf),
     }
 }
