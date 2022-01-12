@@ -1,3 +1,6 @@
+#[cfg(not(target_os = "linux"))]
+compile_error!("This program only works on Linux.");
+
 mod cli;
 mod print;
 mod theme;
