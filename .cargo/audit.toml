@@ -1,0 +1,4 @@
+[advisories]
+# serde_cbor is an unmaintained dependency introduced by criterion,
+# which is only used for benchmarks.
+ignore = [ "RUSTSEC-2021-0127" ]
