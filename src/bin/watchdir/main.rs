@@ -87,6 +87,7 @@ async fn main() {
         top_dir: opts.dir.unwrap().to_owned(),
         need_time: opts.time,
         need_prefix: opts.prefix,
+        oneline: opts.oneline,
         timeout_modify: std::time::Duration::from_millis(opts.throttle_modify),
         event_filter: opts
             .exclude_events

@@ -46,6 +46,7 @@ pub struct PrinterOpts {
     pub top_dir: PathBuf,
     pub need_time: bool,
     pub need_prefix: bool,
+    pub oneline: bool,
     pub timeout_modify: Duration,
     pub event_filter: Vec<EventGroup>,
 }
@@ -179,8 +180,16 @@ impl<'a> Printer {
                     stripped_from_path.to_string_lossy()
                 )?;
 
-                write_color!(self.stdout, [set_dimmed])?;
-                write!(self.stdout, " → ")?;
+                if self.opts.oneline {
+                    write_color!(self.stdout, [set_dimmed])?;
+                    write!(self.stdout, " → ")?;
+                } else {
+                    writeln!(self.stdout)?;
+                    if self.opts.need_time {
+                        write!(self.stdout, "{:26}", "")?;
+                    }
+                    write!(self.stdout, "{:<12}", "→")?;
+                }
 
                 if self.opts.need_prefix {
                     write_color!(self.stdout, [set_dimmed])?;

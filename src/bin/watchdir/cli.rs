@@ -47,6 +47,10 @@ pub struct Opts {
     #[clap(long)]
     canonicalize: bool,
 
+    /// List events per line
+    #[clap(long)]
+    pub oneline: bool,
+
     /// Strip watched directory path
     #[clap(long = "no-prefix", parse(from_flag = std::ops::Not::not))]
     pub prefix: bool,
