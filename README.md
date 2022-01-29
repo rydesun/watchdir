@@ -10,7 +10,7 @@ a directory will be ignored in the following situations:
 - symlink
 
 Also by default, it will ignore what happend in hidden directories.
-Use `--hidden` option to supress this behavior.
+Use `-H`/`--include-hidden` option to supress this behavior.
 
 ## Usage
 
