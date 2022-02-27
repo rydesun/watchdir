@@ -48,4 +48,6 @@ harness = false
 
 [profile.release]
 lto = true
+strip = true
+opt-level = "z"
 codegen-units = 1
