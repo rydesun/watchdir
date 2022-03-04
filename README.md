@@ -1,7 +1,7 @@
 # watchdir
 
 A simple tool to find newly operations in specified directory,
-and do it recursively. It requires inotify to work properly.
+and do it recursively. It requires **inotify** to work properly.
 
 When diving into deeper directory recursively,
 a directory will be ignored in the following situations:
